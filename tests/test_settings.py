@@ -37,6 +37,7 @@ def test_non_hidden_settings_file_supports_shadow_mode_without_smtp(
         "RTSP_URL=rtsp://camera\n"
         "MODEL_PATH=model.pt\n"
         "SHADOW_MODE=true\n"
+        "NO_SMOKE_LOG_INTERVAL_SECONDS=60\n"
         "ALLOW_LIVE_STREAMING=true\n"
         "LIVE_STREAM_PORT=9876\n"
         "SAVE_ALERT_SNAPSHOTS=true\n",
@@ -46,6 +47,7 @@ def test_non_hidden_settings_file_supports_shadow_mode_without_smtp(
         "RTSP_URL",
         "MODEL_PATH",
         "SHADOW_MODE",
+        "NO_SMOKE_LOG_INTERVAL_SECONDS",
         "ALLOW_LIVE_STREAMING",
         "LIVE_STREAM_PORT",
         "SAVE_ALERT_SNAPSHOTS",
@@ -59,6 +61,20 @@ def test_non_hidden_settings_file_supports_shadow_mode_without_smtp(
 
     assert settings.settings_path == settings_file.resolve()
     assert settings.shadow_mode is True
+    assert settings.no_smoke_log_interval_seconds == 60
     assert settings.allow_live_streaming is True
     assert settings.live_stream_port == 9876
     settings.validate_for_monitor()
+
+
+def test_negative_no_smoke_log_interval_is_rejected(tmp_path: Path, monkeypatch):
+    model = tmp_path / "model.pt"
+    model.write_bytes(b"placeholder")
+    monkeypatch.setenv("RTSP_URL", "rtsp://camera")
+    monkeypatch.setenv("MODEL_PATH", str(model))
+    monkeypatch.setenv("SHADOW_MODE", "true")
+    monkeypatch.setenv("NO_SMOKE_LOG_INTERVAL_SECONDS", "-1")
+
+    settings = Settings.from_env(tmp_path)
+    with pytest.raises(ValueError, match="NO_SMOKE_LOG_INTERVAL_SECONDS"):
+        settings.validate_for_monitor()

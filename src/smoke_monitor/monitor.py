@@ -60,15 +60,18 @@ def run_monitor(settings: Settings) -> None:
 
     last_inference = 0.0
     last_alert_snapshot = float("-inf")
+    last_no_smoke_log = float("-inf")
     read_failures = 0
     logger.info(
-        "Monitor started: site=%s camera=%s interval=%.2fs roi=%s shadow_mode=%s live_streaming=%s",
+        "Monitor started: site=%s camera=%s interval=%.2fs roi=%s shadow_mode=%s "
+        "live_streaming=%s no_smoke_log_interval=%.2fs",
         settings.site_name,
         settings.camera_name,
         settings.sample_interval_seconds,
         settings.roi_xyxy or "full frame",
         settings.shadow_mode,
         settings.allow_live_streaming,
+        settings.no_smoke_log_interval_seconds,
     )
 
     try:
@@ -100,6 +103,15 @@ def run_monitor(settings: Settings) -> None:
                 continue
 
             events = alarm.update(detection.smoke, now_monotonic)
+            should_record_no_smoke = (
+                not detection.smoke
+                and settings.no_smoke_log_interval_seconds > 0
+                and now_monotonic - last_no_smoke_log
+                >= settings.no_smoke_log_interval_seconds
+            )
+            if should_record_no_smoke:
+                last_no_smoke_log = now_monotonic
+
             timestamp = datetime.now(timezone.utc)
             record = {
                 "timestamp_utc": timestamp.isoformat(),
@@ -112,6 +124,14 @@ def run_monitor(settings: Settings) -> None:
                 **detection.to_record(),
                 "events": [event.event_type for event in events],
             }
+            if detection.smoke:
+                record["record_reason"] = "smoke_detection"
+            elif events:
+                record["record_reason"] = "alarm_event"
+            elif should_record_no_smoke:
+                record["record_reason"] = "no_smoke_summary"
+            else:
+                record["record_reason"] = "no_smoke_not_persisted"
 
             if (
                 settings.save_alert_snapshots
@@ -180,7 +200,11 @@ def run_monitor(settings: Settings) -> None:
                             {"event": event.event_type, "status": "failed", "error": str(exc)}
                         )
 
-            store.append_record(record)
+            # Detailed records are useful for smoke frames and state-machine
+            # events.  By default, a negative inference is not persisted;
+            # optionally retain one compact summary at a configured interval.
+            if detection.smoke or events or should_record_no_smoke:
+                store.append_record(record)
 
     finally:
         source.close()

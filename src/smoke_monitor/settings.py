@@ -75,6 +75,7 @@ class Settings:
     live_stream_port: int
     save_alert_snapshots: bool
     alert_snapshot_interval_seconds: float
+    no_smoke_log_interval_seconds: float
     jpeg_quality: int
     smtp_host: str
     smtp_port: int
@@ -147,6 +148,9 @@ class Settings:
             alert_snapshot_interval_seconds=_get_float(
                 "ALERT_SNAPSHOT_INTERVAL_SECONDS", 1.0
             ),
+            no_smoke_log_interval_seconds=_get_float(
+                "NO_SMOKE_LOG_INTERVAL_SECONDS", 0.0
+            ),
             jpeg_quality=max(1, min(100, _get_int("JPEG_QUALITY", 90))),
             smtp_host=os.getenv("SMTP_HOST", "").strip(),
             smtp_port=_get_int("SMTP_PORT", 25),
@@ -203,6 +207,8 @@ class Settings:
             problems.append("LIVE_STREAM_HOST is empty while live streaming is enabled")
         if self.alert_snapshot_interval_seconds <= 0:
             problems.append("ALERT_SNAPSHOT_INTERVAL_SECONDS must be positive")
+        if self.no_smoke_log_interval_seconds < 0:
+            problems.append("NO_SMOKE_LOG_INTERVAL_SECONDS must be >= 0")
         if problems:
             raise ValueError("Invalid monitor configuration:\n- " + "\n- ".join(problems))
 

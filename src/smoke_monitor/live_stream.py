@@ -1,7 +1,10 @@
-"""Optional browser-viewable MJPEG stream for annotated monitor frames.
+"""Optional browser-viewable video preview for annotated monitor frames.
 
 The server uses Python's standard library and OpenCV only.  It keeps the
 latest encoded frame in memory; it does not write a live JPG or JSON file.
+The browser page consumes the frame stream, creates a MediaStream from a
+canvas, and displays that MediaStream in a real ``<video>`` element.  This is
+more compatible than asking browsers to play MJPEG directly as a video URL.
 The default bind address is localhost.  Set ``LIVE_STREAM_HOST=0.0.0.0`` only
 when the site network and firewall rules explicitly allow other clients.
 """
@@ -28,7 +31,7 @@ class _LiveHTTPServer(ThreadingHTTPServer):
 
 
 class LiveStreamServer:
-    """Serve the latest annotated frame as an MJPEG browser stream."""
+    """Serve annotated frames for a browser video preview."""
 
     def __init__(
         self,
@@ -72,7 +75,7 @@ class LiveStreamServer:
         )
         self._thread.start()
         self._started = True
-        logger.info("Live MJPEG stream started at %s", self.url)
+        logger.info("Live browser video stream started at %s", self.url)
 
     def publish(self, frame: np.ndarray, record: dict[str, Any]) -> None:
         """Encode and publish one annotated frame without writing it to disk."""
@@ -123,7 +126,7 @@ class LiveStreamServer:
                 self._thread.join(timeout=3.0)
         self._server.server_close()
         self._started = False
-        logger.info("Live MJPEG stream stopped")
+        logger.info("Live browser video stream stopped")
 
 
 class _LiveRequestHandler(BaseHTTPRequestHandler):
@@ -137,7 +140,7 @@ class _LiveRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in {"", "/"}:
             self._send_html()
-        elif path == "/stream.mjpg":
+        elif path == "/stream":
             self._send_stream()
         elif path == "/latest.json":
             self._send_latest_json()
@@ -152,11 +155,109 @@ class _LiveRequestHandler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Industrial Smoke Monitor</title>
 <style>body{{margin:0;background:#111;color:#eee;font:16px system-ui,sans-serif}}
-main{{max-width:1280px;margin:auto;padding:16px}} img{{display:block;max-width:100%;height:auto}}
-a{{color:#8bd5ff}}</style></head>
+main{{max-width:1280px;margin:auto;padding:16px}}
+video{{display:block;width:100%;max-height:80vh;background:#000}}
+a{{color:#8bd5ff}} .status{{color:#b9c6d3}}</style></head>
 <body><main><h1>Industrial Smoke Monitor</h1>
-<img src="/stream.mjpg" alt="Live annotated smoke monitor stream">
+<video id="live-video" autoplay muted playsinline controls
+  aria-label="Live annotated smoke monitor video"></video>
+<canvas id="frame-canvas" hidden></canvas>
+<p id="status" class="status">Connecting to live video...</p>
 <p><a href="/latest.json">Latest scores (JSON)</a> · <a href="/healthz">Health</a></p>
+<script>
+(() => {{
+  const video = document.getElementById("live-video");
+  const canvas = document.getElementById("frame-canvas");
+  const context = canvas.getContext("2d");
+  const status = document.getElementById("status");
+  let canvasStream = null;
+  let stopped = false;
+
+  const sleep = (milliseconds) => new Promise((resolve) =>
+    window.setTimeout(resolve, milliseconds));
+
+  function appendBytes(left, right) {{
+    const joined = new Uint8Array(left.length + right.length);
+    joined.set(left);
+    joined.set(right, left.length);
+    return joined;
+  }}
+
+  function findMarker(bytes, first, second, start) {{
+    for (let index = start; index + 1 < bytes.length; index += 1) {{
+      if (bytes[index] === first && bytes[index + 1] === second) return index;
+    }}
+    return -1;
+  }}
+
+  async function consumeFrameStream() {{
+    const response = await fetch("/stream", {{cache: "no-store"}});
+    if (!response.ok || !response.body) throw new Error("stream request failed");
+    const reader = response.body.getReader();
+    let buffer = new Uint8Array(0);
+
+    while (!stopped) {{
+      const {{value, done}} = await reader.read();
+      if (done) return;
+      if (value) buffer = appendBytes(buffer, value);
+
+      while (true) {{
+        const start = findMarker(buffer, 0xff, 0xd8, 0);
+        if (start < 0) {{
+          if (buffer.length > 1024 * 1024) buffer = buffer.slice(-2);
+          break;
+        }}
+        const end = findMarker(buffer, 0xff, 0xd9, start + 2);
+        if (end < 0) {{
+          if (start > 0) buffer = buffer.slice(start);
+          break;
+        }}
+
+        const jpeg = buffer.slice(start, end + 2);
+        buffer = buffer.slice(end + 2);
+        const bitmap = await createImageBitmap(
+          new Blob([jpeg], {{type: "image/jpeg"}})
+        );
+
+        if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {{
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+        }}
+        if (!canvasStream) {{
+          if (!canvas.captureStream) {{
+            throw new Error("this browser has no canvas video support");
+          }}
+          canvasStream = canvas.captureStream(10);
+          video.srcObject = canvasStream;
+          await video.play().catch(() => {{}});
+        }}
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        status.textContent = "Live video connected";
+      }}
+    }}
+  }}
+
+  async function start() {{
+    if (!HTMLCanvasElement.prototype.captureStream) {{
+      status.textContent = "This browser cannot display the live video preview.";
+      return;
+    }}
+    while (!stopped) {{
+      try {{
+        await consumeFrameStream();
+        status.textContent = "Live video reconnecting...";
+      }} catch (error) {{
+        status.textContent = "Live video unavailable; retrying...";
+        console.error(error);
+      }}
+      await sleep(1000);
+    }}
+  }}
+
+  start();
+}})();
+</script>
 </main></body></html>""".encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

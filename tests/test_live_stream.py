@@ -25,7 +25,13 @@ def test_live_stream_serves_annotated_frame_and_scores():
         assert latest["classification"] == "smoke"
         assert latest["conf"] == 0.91
 
-        with urlopen(server.url + "stream.mjpg", timeout=3) as response:
+        with urlopen(server.url, timeout=3) as response:
+            page = response.read().decode("utf-8")
+        assert "<video" in page
+        assert 'fetch("/stream"' in page
+        assert '<img src="/stream' not in page
+
+        with urlopen(server.url + "stream", timeout=3) as response:
             assert response.headers["Content-Type"].startswith(
                 "multipart/x-mixed-replace"
             )
