@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>工業煙囪冒煙監測系統－專案架構</title>
+  <style>
+    :root { --ink:#1f2937; --muted:#64748b; --brand:#0f766e; --blue:#e0f2fe; --green:#dcfce7; --amber:#fef3c7; --red:#fee2e2; --line:#cbd5e1; --paper:#ffffff; --bg:#f1f5f9; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif; line-height:1.75; }
+    main { max-width:1120px; margin:0 auto; background:var(--paper); padding:42px 58px 70px; }
+    h1 { margin:0 0 8px; color:#0f172a; font-size:2.15rem; line-height:1.25; }
+    h2 { margin-top:2.4rem; padding-bottom:6px; border-bottom:2px solid #ccfbf1; color:#115e59; }
+    h3 { color:#334155; margin-top:1.6rem; }
+    p, li { max-width:95ch; }
+    .subtitle { color:var(--muted); margin-top:0; }
+    .notice { padding:16px 18px; border-left:5px solid #f59e0b; background:var(--amber); border-radius:8px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:10px; padding:16px 18px; background:#fff; }
+    .card h3 { margin:0 0 6px; }
+    .flow { display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center; gap:8px; margin:22px 0; }
+    .flow .node { flex:1 1 150px; min-width:145px; max-width:205px; padding:15px 12px; border:1px solid #99f6e4; border-radius:10px; background:#f0fdfa; text-align:center; font-weight:700; }
+    .flow .arrow { align-self:center; color:var(--brand); font-size:1.5rem; font-weight:700; }
+    table { width:100%; border-collapse:collapse; margin:14px 0 22px; font-size:.96rem; }
+    th, td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; }
+    th { background:#f8fafc; color:#334155; }
+    code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.92em; }
+    pre { background:#0f172a; color:#e2e8f0; padding:16px; border-radius:9px; overflow:auto; line-height:1.5; }
+    .small { color:var(--muted); font-size:.92rem; }
+    .tag { display:inline-block; padding:2px 8px; border-radius:999px; background:#ccfbf1; color:#115e59; font-size:.82rem; font-weight:700; }
+    footer { border-top:1px solid var(--line); margin-top:38px; padding-top:16px; color:var(--muted); font-size:.9rem; }
+    @media (max-width:700px) { main { padding:28px 20px 48px; } h1 { font-size:1.7rem; } .flow .arrow { transform:rotate(90deg); } }
+  </style>
+</head>
+<body>
+<main>
+  <span class="tag">YOLO11 · RTSP · Email</span>
+  <h1>工業煙囪冒煙監測系統：專案架構</h1>
+  <p class="subtitle">給第一次接觸 AI 視覺辨識者的設計說明。版本 0.1.0，適用於先在訓練電腦微調模型，再部署到只能存取內部攝影機與郵件 relay 的現場電腦。</p>
+
+  <div class="notice"><strong>先講結論：</strong>這不是「看到一張圖有白色就寄信」的系統。它先用 YOLO11-seg 找出煙霧的形狀，再用連續影格確認煙霧持續存在，最後才寄出 Email。這三層分開，才能逐步調整速度、準確率與誤報率。</div>
+  <p class="small">第一次接觸 YOLO11 的讀者，可先閱讀 <a href="../intro_YOLO11/">YOLO11 特色與工作原理導覽</a>，再回來看本文件如何把模型接到 ROI、RTSP、時間狀態機與 Email。</p>
+
+  <h2>1. 系統要解決的問題</h2>
+  <p>輸入是攝影機的 RTSP 串流，例如 <code>rtsp://user:password@10.34.23.152:554/live.sdp</code>。每隔固定時間抽一張影格，判斷指定煙囪附近是否有煙霧；若連續多張影格都符合條件，便儲存證據影像並經由 SMTP 寄送通知。</p>
+  <div class="grid">
+    <div class="card"><h3>辨識目標</h3><p>一個類別：<code>smoke</code>。IJmond 原始遮罩的低／高不透明度在第一版合併，因為目前需求是「是否冒煙」，不是判定 EPA Method 9 等級。</p></div>
+    <div class="card"><h3>資料來源</h3><p>IJmond Industrial Smoke Segmentation Dataset。它包含像素遮罩與 polygon 資訊；本專案把 raster mask 轉成 YOLO polygon label。</p></div>
+    <div class="card"><h3>部署邊界</h3><p>模型、程式與紀錄留在現場電腦。RTSP 與 SMTP relay 必須是可達的內部網路資源；隔離外網不代表可以直接寄到公開信箱。</p></div>
+  </div>
+
+  <h2>2. 整體資料流</h2>
+  <div class="flow" aria-label="system flow">
+    <div class="node">固定式攝影機<br><small>RTSP</small></div><div class="arrow">→</div>
+    <div class="node">RTSP 讀取器<br><small>斷線自動重連</small></div><div class="arrow">→</div>
+    <div class="node">ROI 裁切<br><small>只看煙囪附近</small></div><div class="arrow">→</div>
+    <div class="node">YOLO11-seg<br><small>形狀＋信心度</small></div><div class="arrow">→</div>
+    <div class="node">時間狀態機<br><small>連續影格確認</small></div><div class="arrow">→</div>
+    <div class="node">證據影像＋Email<br><small>SMTP relay</small></div>
+  </div>
+  <p class="small">若現場只需要矩形框而沒有煙霧形狀，YOLO detection 也可以使用；本專案選 segmentation 是因為指定資料集本身提供煙霧遮罩，而且面積比例可以作為第二個判斷條件。</p>
+
+  <h2>3. 為什麼使用 YOLO11-seg</h2>
+  <p>YOLO11 是 Ultralytics 的即時視覺模型系列，支援 detection、instance segmentation 等任務；分割模型的檔名使用 <code>-seg</code>，例如 <code>yolo11n-seg.pt</code>。本專案使用預訓練權重再用工業煙霧資料微調，而不是從隨機權重開始訓練，通常可以更快學到輪廓與背景特徵。</p>
+  <table>
+    <thead><tr><th>模型</th><th>特性</th><th>建議用途</th></tr></thead>
+    <tbody>
+      <tr><td><code>yolo11n-seg.pt</code></td><td>最小、速度快、顯存需求較低</td><td>第一次建立基線；8 GB GPU 或現場 CPU 優先</td></tr>
+      <tr><td><code>yolo11s-seg.pt</code></td><td>較大的特徵抽取能力，速度與顯存需求中等</td><td>n 版漏檢較多時，以本地煙囪資料微調</td></tr>
+      <tr><td><code>yolo11m/l/x-seg.pt</code></td><td>更大、訓練與推論成本高</td><td>只有在驗證資料證明值得時才考慮</td></tr>
+    </tbody>
+  </table>
+  <p>「模型大小越大一定越好」是不正確的。對這個專案，現場攝影機角度、光線、煙囪外觀與 ROI 是否相似，通常比把模型從 n 換成 l 更重要。</p>
+
+  <h2>4. 資料集與資料轉換</h2>
+  <p>IJmond 資料集來自三個固定攝影機，提供 cropped images、mask、metadata 以及依時間或攝影機切分的清單。資料集頁面列出 900 張 raw images、1209 個 polygon，以及 2074 張 cropped images，其中 1109 張有煙霧。原始 mask 以 0 表示背景、155 表示低不透明度煙霧、255 表示高不透明度煙霧。</p>
+  <p>本專案的 <code>scripts/prepare_ijmond.py</code> 會：</p>
+  <ol>
+    <li>優先讀取資料集提供的 <code>split_by_camera</code> 或 <code>split_by_timestamp</code> 清單；</li>
+    <li>將 mask 中所有大於 0 的像素合成二值 smoke mask；</li>
+    <li>以 OpenCV 找出連通區域輪廓，正規化成 YOLO segmentation label；</li>
+    <li>保留無煙影像，產生空的 <code>.txt</code> label，讓模型學會「沒有煙」；</li>
+    <li>輸出 <code>images/{train,val,test}</code> 與 <code>labels/{train,val,test}</code>。</li>
+  </ol>
+  <p class="small">預設使用 camera split 的目的，是讓測試較接近「換一個攝影機／背景後仍能否辨識」。但使用者的實際工廠與荷蘭資料集不是同一場域，所以 IJmond 測試分數不能直接當作現場保證；必須另外用現場影片驗收。</p>
+
+  <h2>5. 現場推論與告警判斷</h2>
+  <p>每次模型預測會得到煙霧 mask、偵測信心度與煙霧面積比例。程式先判定單張影格是否為 positive：</p>
+  <pre>positive = (存在 smoke 實例)
+        且 (信心度 ≥ CONF_THRESHOLD)
+        且 (煙霧遮罩面積 / ROI 面積 ≥ MIN_SMOKE_AREA_RATIO)</pre>
+  <p>接著由狀態機處理時間：</p>
+  <table>
+    <thead><tr><th>狀態</th><th>條件</th><th>動作</th></tr></thead>
+    <tbody>
+      <tr><td>NORMAL</td><td>連續 positive 達到 <code>POSITIVE_FRAMES_TO_ALARM</code></td><td>進入 ALARM、儲存證據、寄送開始警報</td></tr>
+      <tr><td>ALARM</td><td>煙霧仍持續，且距離上次通知超過 <code>ALERT_REPEAT_SECONDS</code></td><td>寄送持續警報，避免每秒寄信</td></tr>
+      <tr><td>ALARM</td><td>連續 negative 達到 <code>NEGATIVE_FRAMES_TO_CLEAR</code></td><td>回到 NORMAL，可寄送解除通知</td></tr>
+    </tbody>
+  </table>
+  <p>例如抽樣間隔是一秒、positive 門檻是 5，代表至少約 5 秒持續判定為煙霧才告警。這不是物理安全聯鎖，也不是排放法規判定；它是影像事件通知系統。</p>
+
+  <h2>6. 專案目錄與責任</h2>
+  <table>
+    <thead><tr><th>位置</th><th>責任</th><th>是否提交 Git</th></tr></thead>
+    <tbody>
+      <tr><td><code>scripts/prepare_ijmond.py</code></td><td>資料集轉換與清單紀錄</td><td>是</td></tr>
+      <tr><td><code>scripts/train.py</code>、<code>validate.py</code></td><td>模型微調與測試</td><td>是</td></tr>
+      <tr><td><code>src/smoke_monitor/detector.py</code></td><td>YOLO11-seg 與 ROI／面積後處理</td><td>是</td></tr>
+      <tr><td><code>src/smoke_monitor/alarm.py</code></td><td>連續影格告警狀態機</td><td>是</td></tr>
+      <tr><td><code>src/smoke_monitor/emailer.py</code></td><td>SMTP Email 與證據附件</td><td>是</td></tr>
+      <tr><td><code>intro_YOLO11/README.md</code></td><td>YOLO11 的任務、架構、訓練、評估與部署入門</td><td>是</td></tr>
+      <tr><td><code>data/runtime/</code></td><td>現場 log、JSONL、evidence、alerts sidecar；可選即時串流只保留在記憶體</td><td>否，應備份而非提交</td></tr>
+      <tr><td><code>configs/monitor_settings.env</code>、<code>models/best.pt</code></td><td>現場設定密碼與大型模型權重</td><td>否；以受控方式傳輸</td></tr>
+      <tr><td><code>alert_reviewer/</code></td><td>檢查、重標註與回送告警資料</td><td>程式提交 Git；runtime 告警資料不提交</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. 失效模式與安全邊界</h2>
+  <div class="grid">
+    <div class="card"><h3>RTSP 斷線</h3><p>讀取器釋放連線並重連；不把斷線當成「無煙」，因此不會因鏡頭失效而寄送解除通知。</p></div>
+    <div class="card"><h3>SMTP 故障</h3><p>監測程序繼續執行，失敗資訊寫入 <code>detections.jsonl</code> 與 log。部署前必須先測試內部 relay，並建立 log 監看。</p></div>
+    <div class="card"><h3>模型誤判</h3><p>調整 ROI、信心度、面積比例與連續影格門檻；必要時加入現場標註資料微調，不要只盲目增加 epochs。</p></div>
+    <div class="card"><h3>法規與人身安全</h3><p>影像告警不應取代現場安全聯鎖、人工確認或法定排放量測。Email 延遲與網路故障都可能發生。</p></div>
+  </div>
+
+  <h2>8. 監控輸出與人工複核</h2>
+  <p>設定 <code>ALLOW_LIVE_STREAMING=true</code> 時，程序會在記憶體中啟動標準庫 MJPEG HTTP server，不寫入 live JPG。瀏覽器開啟 <code>http://127.0.0.1:8765/</code> 即可觀看包含 ROI、box、mask、conf、area、cls 的即時標註影像；分數也可由 <code>/latest.json</code> 讀取。預設只綁定 localhost；若要讓同網段其他電腦觀看，才把 <code>LIVE_STREAM_HOST</code> 改為 <code>0.0.0.0</code>，並由 IT 設定防火牆。</p>
+  <p>偵測為 smoke 時，預設會把標註影像與詳盡 JSON sidecar 保存到 <code>data/runtime/alerts/YYYY-MM-DD/</code>。資料夾與訓練資料集分開，使用 <a href="../alert_reviewer/docs/architecture.html">報警資料檢查／重標註子專案</a> 可把人工確認的樣本保留、移動到 YOLO 資料集或刪除。<code>SHADOW_MODE=true</code> 仍會執行推論、狀態機與保存，但會抑制所有 Email，適合新模型正式切換前驗證。</p>
+
+  <h2>9. 現場部署與維運</h2>
+  <p>現場 Windows 電腦採用 Python 3.11.15 與已驗證的相依套件執行原始程式。隔離環境先依<a href="offline_win_amd64_python311_cpu_install_guide.html">離線安裝手順</a>準備 Windows wheel／Conda 套件，再複製程式、<code>models/best.pt</code> 與受控建立的 <code>configs/monitor_settings.env</code>。本 repository 不包含 Windows 可執行檔打包流程。</p>
+  <p>部署驗收應依序確認 Python／套件可匯入、模型可載入、RTSP 能穩定取流、SMTP relay 可達，以及監測程序重啟後能恢復。若公司端點政策禁止未核准腳本或套件，應先由 IT 核准 wheelhouse、版本清單與檔案雜湊。</p>
+
+  <h2>10. 主要外部參考</h2>
+  <ul>
+    <li><a href="https://docs.ultralytics.com/models/yolo11">Ultralytics YOLO11 官方文件</a></li>
+    <li><a href="https://docs.ultralytics.com/tasks/segment">Ultralytics Instance Segmentation 文件</a></li>
+    <li><a href="https://uvaauas.figshare.com/articles/dataset/IJmond_Industrial_Smoke_Segmentation_Dataset/31847188">IJmond 資料集（Figshare）</a></li>
+    <li><a href="https://arxiv.org/abs/2603.23754">IJmond technical report（arXiv）</a></li>
+    <li><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></li>
+  </ul>
+
+  <h2>11. 訓練結果評估補充教材</h2>
+  <p>主流程文件說明如何執行訓練與部署；若要判斷一次訓練是否真的有進步，請閱讀<a href="../supplements/training_result_evaluation_guide.html">訓練結果評估與調參指南</a>。該指南以本專案附上的 IJmond 訓練紀錄為例，解釋 Box／Mask 的 P、R、mAP50、mAP50-95、F1、混淆矩陣與預測圖，並把改善順序延伸到現場小目標、ROI、資料切分、hard negative、資料增強與 Email 告警的事件級驗收。</p>
+
+  <footer>本文件是系統設計說明；實際門檻應以現場影片、攝影機解析度、煙囪距離與 SMTP 網路規則測試後定版。訓練結果的判讀與調整請參考 <a href="../supplements/training_result_evaluation_guide.html">supplements 指南</a>。</footer>
+</main>
+</body>
+</html>

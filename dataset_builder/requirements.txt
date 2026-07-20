@@ -1,0 +1,11 @@
+# Python 3.11.15 / Windows CPU environment used by the parent project.
+# If these packages are already installed in the parent environment, no
+# second installation is necessary.
+ultralytics>=8.3.0,<9.0
+opencv-python>=4.9.0,!=4.13.0.90
+numpy==1.26
+PyYAML>=6.0
+python-dotenv>=1.0
+Pillow>=10.0
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu

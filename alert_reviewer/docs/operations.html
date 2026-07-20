@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>報警資料檢查與重標註－操作說明</title>
+  <style>
+    :root { --ink:#1f2937; --muted:#64748b; --brand:#0f766e; --line:#cbd5e1; --bg:#f1f5f9; --paper:#fff; --green:#dcfce7; --red:#fee2e2; --amber:#fef3c7; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif; line-height:1.75; }
+    main { max-width:1120px; margin:0 auto; padding:42px 56px 70px; background:var(--paper); } h1 { line-height:1.3; color:#0f172a; }
+    h2 { margin-top:2.2rem; color:#115e59; border-bottom:2px solid #ccfbf1; padding-bottom:6px; } h3 { color:#334155; }
+    p, li { max-width:95ch; } .notice { padding:15px 18px; border-left:5px solid #f59e0b; background:var(--amber); border-radius:8px; }
+    .danger { padding:15px 18px; border-left:5px solid #dc2626; background:var(--red); border-radius:8px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; } .card { border:1px solid var(--line); border-radius:10px; padding:15px 17px; background:#fff; }
+    code { background:#f1f5f9; padding:1px 5px; border-radius:4px; } pre { background:#0f172a; color:#e2e8f0; padding:15px; border-radius:8px; overflow:auto; }
+    table { width:100%; border-collapse:collapse; margin:14px 0 22px; } th, td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; } th { background:#f8fafc; }
+    footer { margin-top:34px; border-top:1px solid var(--line); padding-top:14px; color:var(--muted); }
+  </style>
+</head>
+<body><main>
+  <h1>報警資料檢查與重標註 GUI：操作說明</h1>
+  <p>本工具適合在模型驗證或 shadow mode 期間使用。它不會連 RTSP、不會寄 Email，也不會載入 <code>best.pt</code>；它只處理已保存的告警影像與 JSON。</p>
+  <div class="notice"><strong>建議第一次使用：</strong>先複製資料集到備份位置，先「保留在原地」測試幾筆，確認輸出正確後再使用「移動」或「刪除」。</div>
+
+  <h2>1. 安裝與啟動</h2>
+  <pre>cd industrial-smoke-monitor
+python -m pip install -r alert_reviewer/requirements.txt
+python alert_reviewer/gui/alert_reviewer_gui.py \
+  --input data/runtime/alerts \
+  --dataset data/processed/field_yolo \
+  --split train</pre>
+  <p>PowerShell 的換行符號是反引號，也可以把指令寫成一行。GUI 需要 Python 3.11.15 與 Tkinter；不需要安裝 Ultralytics、PyTorch 或 GPU。</p>
+
+  <h2>2. 畫面上的基本操作</h2>
+  <div class="grid">
+    <div class="card"><h3>左側清單</h3><p>列出每個告警 JPG／JSON。<code>unreviewed</code> 表示尚未人工確認；點選後中央會顯示影像。</p></div>
+    <div class="card"><h3>中央影像</h3><p>影像已包含模型輸出的 ROI、box、mask、conf、area、cls。依序點擊煙霧輪廓，再按「完成目前 polygon」可建立人工標註。</p></div>
+    <div class="card"><h3>右側資訊</h3><p>顯示 timestamp、整體 conf／area、instance 數、ROI 與每個模型 instance 的 box／polygon；它是判讀模型的證據。</p></div>
+  </div>
+  <ol>
+    <li>先選擇人工分類：有煙選 <code>smoke</code>；雲、蒸汽、光影或其他誤報選 <code>no_smoke</code>。</li>
+    <li>若是 smoke，檢查原模型 polygon；錯誤時按「清除全部線條」後在影像上重新點出輪廓。</li>
+    <li>必要時修改上方「訓練資料集」路徑與 split。正常新增現場樣本使用 <code>train</code>；不要把同一段影片的相鄰影格分到 val/test。</li>
+    <li>選擇完成後處理，再按「套用目前告警」。</li>
+  </ol>
+
+  <h2>3. 三種完成後處理</h2>
+  <table>
+    <thead><tr><th>選項</th><th>會發生什麼</th><th>適合何時使用</th></tr></thead>
+    <tbody>
+      <tr><td>保留在原地</td><td>更新 JSON 的 <code>review</code>、分類與 polygon，並在告警旁寫同名 YOLO <code>.txt</code>；原 JPG 不移動。</td><td>先做品質檢查、還不想加入訓練資料時。</td></tr>
+      <tr><td>移動到訓練資料集</td><td>寫入 <code>images/{split}</code>、<code>labels/{split}</code>，更新 <code>dataset.yaml</code>／<code>manifest.csv</code>，成功後刪除原告警 JPG、JSON、txt。</td><td>人工已確認且希望下一輪訓練使用時。</td></tr>
+      <tr><td>刪除</td><td>刪除該告警 JPG、JSON、txt，不會加入訓練集，也不會刪除其他 log。</td><td>確定是無用資料或公司政策要求刪除時。</td></tr>
+    </tbody>
+  </table>
+  <div class="danger"><strong>刪除與移動不可由 GUI 復原。</strong>若日後可能需要稽核，先備份 <code>data/runtime/alerts/</code>。即使選擇 move，程式只會移除該筆 alert artifact，不會清除母專案的 <code>detections.jsonl</code>。</div>
+
+  <h2>4. 如何判斷一筆告警</h2>
+  <table>
+    <thead><tr><th>觀察項目</th><th>新手可問的問題</th></tr></thead>
+    <tbody>
+      <tr><td>影像內容</td><td>煙霧是否真的從煙囪出口出現？雲、蒸汽、雨、逆光與熱氣是否被誤認？</td></tr>
+      <tr><td>ROI</td><td>煙囪和煙霧是否在 ROI 內？ROI 是否太窄而截斷煙霧，或太大而包含天空？</td></tr>
+      <tr><td>mask</td><td>橘／紅色輪廓是否覆蓋煙霧，而不是只框住煙囪、建築或背景？</td></tr>
+      <tr><td>conf 與 area</td><td>高 conf 不等於一定正確；area 是 mask 佔 ROI 的比例，需結合影像與連續影格一起看。</td></tr>
+      <tr><td>跨影格</td><td>同一段煙霧是否有多個告警？可用 timestamp 判斷是否只是每秒抽樣的同一事件。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. 匯入訓練與資料品質</h2>
+  <pre>python dataset_builder/scripts/check_dataset.py \
+  --dataset data/processed/field_yolo
+
+python scripts/train.py \
+  --data data/processed/field_yolo/dataset.yaml \
+  --model yolo11n-seg.pt \
+  --name smoke_field_v002</pre>
+  <p>如果 GUI 中標記 <code>no_smoke</code>，輸出的是空的 label 檔，這是 YOLO 表示負樣本的正確方式。若標記 smoke 卻沒有 polygon，工具會提醒；除非你有明確理由，否則不要把沒有輪廓的影像當作 smoke 訓練。</p>
+  <ul>
+    <li>同一段影片的連續影格很相似，不能只因樣本數增加就認為泛化能力增加；按攝影機／日期／影片切分。</li>
+    <li>保留一批從未加入訓練的現場影片作為固定驗收集，否則每輪訓練都可能只是在記住已看過的影像。</li>
+    <li>記錄模型版本、資料集版本、門檻與現場事件結果；不要覆蓋唯一的 <code>best.pt</code>。</li>
+  </ul>
+
+  <h2>6. 常見問題</h2>
+  <details><summary>清單是空的</summary><p>確認輸入資料夾是 <code>data/runtime/alerts</code>，並且每筆資料有同名 JPG 與 JSON。新的 monitor 只有在 <code>SAVE_ALERT_SNAPSHOTS=true</code> 且偵測為 smoke 時才會產生。</p></details>
+  <details><summary>看不到原模型 polygon</summary><p>舊版本只保存簡單候選 JPG 時，JSON 可能沒有 <code>instances[].polygon</code>。你仍可以在中央影像重新點 polygon；新版本會完整保存逐 instance polygon。</p></details>
+  <details><summary>能不能直接把 alert 影像丟到資料集？</summary><p>可以用 GUI 的 move，但不建議人工未確認就批量搬入。誤報會成為錯誤標籤，下一輪模型可能學會錯誤背景。</p></details>
+  <details><summary>GUI 是否會寄信？</summary><p>不會。Email 只由母專案 monitor 負責；reviewer 不讀 SMTP 設定，也不載入模型。</p></details>
+
+  <footer><a href="architecture.html">查看子專案架構</a>　｜　<a href="../../docs/operations.html">回母專案操作書</a></footer>
+</main></body></html>

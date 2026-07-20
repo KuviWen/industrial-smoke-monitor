@@ -1,0 +1,19 @@
+[Unit]
+Description=Industrial chimney smoke monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smokemonitor
+Group=smokemonitor
+WorkingDirectory=/opt/industrial-smoke-monitor
+EnvironmentFile=/opt/industrial-smoke-monitor/configs/monitor_settings.env
+ExecStart=/opt/industrial-smoke-monitor/.venv/bin/python /opt/industrial-smoke-monitor/scripts/run_monitor.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

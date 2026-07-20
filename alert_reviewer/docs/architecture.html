@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>報警資料檢查與重標註－子專案架構</title>
+  <style>
+    :root { --ink:#1f2937; --muted:#64748b; --brand:#0f766e; --line:#cbd5e1; --bg:#f1f5f9; --paper:#fff; --amber:#fef3c7; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif; line-height:1.75; }
+    main { max-width:1120px; margin:0 auto; padding:42px 56px 70px; background:var(--paper); }
+    h1 { line-height:1.3; color:#0f172a; } h2 { margin-top:2.2rem; color:#115e59; border-bottom:2px solid #ccfbf1; padding-bottom:6px; }
+    h3 { color:#334155; } p, li { max-width:95ch; }
+    .notice { padding:15px 18px; border-left:5px solid #f59e0b; background:var(--amber); border-radius:8px; }
+    .flow { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; margin:22px 0; }
+    .node { min-width:180px; padding:14px; text-align:center; border:1px solid #99f6e4; border-radius:10px; background:#f0fdfa; font-weight:700; }
+    .arrow { color:var(--brand); font-size:1.5rem; } table { width:100%; border-collapse:collapse; margin:14px 0 22px; }
+    th, td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; } th { background:#f8fafc; }
+    code { background:#f1f5f9; padding:1px 5px; border-radius:4px; } pre { background:#0f172a; color:#e2e8f0; padding:15px; border-radius:8px; overflow:auto; }
+    footer { margin-top:34px; border-top:1px solid var(--line); padding-top:14px; color:var(--muted); }
+    @media (max-width:700px) { main { padding:28px 20px 48px; } .arrow { transform:rotate(90deg); } }
+  </style>
+</head>
+<body><main>
+  <h1>報警資料檢查與重標註：子專案架構</h1>
+  <p>這個工具處理的是「模型曾經報警的候選資料」，不是原始訓練資料，也不是直接修改模型。它讓人員先看證據，再決定是否把修正後的樣本送回訓練流程。</p>
+  <div class="notice"><strong>設計原則：</strong>告警資料先寫到 <code>data/runtime/alerts/</code>，與 <code>data/processed/</code> 分開；只有使用者按下「移動到訓練資料集」才會進入 YOLO 資料結構。</div>
+
+  <h2>1. 資料流</h2>
+  <div class="flow">
+    <div class="node">monitor<br><small>影像＋評分</small></div><div class="arrow">→</div>
+    <div class="node">alerts/<br><small>JPG＋JSON sidecar</small></div><div class="arrow">→</div>
+    <div class="node">Tkinter GUI<br><small>查看／重畫 polygon</small></div><div class="arrow">→</div>
+    <div class="node">人工決策<br><small>保留／移動／刪除</small></div>
+  </div>
+
+  <h2>2. 子專案目錄</h2>
+  <pre>alert_reviewer/
+├── gui/alert_reviewer_gui.py       # Tkinter GUI 入口
+├── src/alert_reviewer/review.py    # 告警掃描、JSON、YOLO label、資料集輸出
+├── tests/test_review.py            # 核心服務測試
+├── docs/architecture.html          # 本文件
+├── docs/operations.html            # 操作手冊
+├── requirements.txt                # 不含 YOLO／Torch 的輕量依賴
+└── pyproject.toml</pre>
+
+  <h2>3. 告警 artifact</h2>
+  <table>
+    <thead><tr><th>檔案</th><th>用途</th><th>保留內容</th></tr></thead>
+    <tbody>
+      <tr><td><code>YYYY-MM-DD/*_smoke.jpg</code></td><td>監控當下的標註影像</td><td>原圖、ROI 框、box、mask、conf、area、cls、instances</td></tr>
+      <tr><td><code>YYYY-MM-DD/*_smoke.json</code></td><td>可讀的評分與 provenance</td><td>時間、攝影機、模型判斷、polygon、alarm state、shadow mode、檔案路徑</td></tr>
+      <tr><td>同名 <code>.txt</code></td><td>人工複核後的 YOLO segmentation label</td><td><code>smoke</code> 為 polygon；<code>no_smoke</code> 為空檔</td></tr>
+    </tbody>
+  </table>
+  <p>JSON 的 <code>instances</code> 是模型原始結果；GUI 的 <code>review.polygons</code> 才是人工修正後的結果。兩者同時保存，方便事後比較模型與人工。</p>
+
+  <h2>4. 與母專案的邊界</h2>
+  <table>
+    <thead><tr><th>元件</th><th>負責</th><th>不負責</th></tr></thead>
+    <tbody>
+      <tr><td>母專案 monitor</td><td>RTSP、YOLO11-seg、時間狀態機、Email、保存 alert</td><td>自動把未確認影像拿去重訓</td></tr>
+      <tr><td>alert reviewer</td><td>查看、重畫 polygon、建立 parent-compatible YOLO sample</td><td>推論、訓練或寄信</td></tr>
+      <tr><td>dataset_builder</td><td>影片抽幀、標註與資料集管理</td><td>決定告警是否為真煙霧</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. 輸出結構</h2>
+  <pre>data/processed/field_yolo/
+├── dataset.yaml
+├── manifest.csv
+├── images/train/*.jpg
+├── labels/train/*.txt
+├── images/val/*.jpg
+└── labels/val/*.txt</pre>
+  <p>此結構可直接交給母專案的 <code>configs/ijmond.yaml</code> 同類 YOLO segmentation 流程使用；實際訓練前仍要按攝影機、日期或場景重新規劃 train/val/test，避免相鄰影格洩漏到不同 split。</p>
+
+  <footer><a href="operations.html">前往 GUI 操作說明</a>　｜　<a href="../../docs/architecture.html">回母專案架構</a></footer>
+</main></body></html>

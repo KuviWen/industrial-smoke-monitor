@@ -1,0 +1,17 @@
+# Install a CUDA-compatible torch/torchvision build first on a GPU training PC.
+# The exact torch wheel must match the installed NVIDIA driver and the chosen
+# CUDA runtime. The field PC can use the same environment or a CPU-only build.
+ultralytics>=8.3.0,<9.0
+opencv-python>=4.9.0,!=4.13.0.90
+numpy==1.26
+PyYAML>=6.0
+python-dotenv>=1.0
+Pillow>=10.0
+
+# Annotate the following lines if no GPUs.
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+
+# Un-annotate the following lines if no GPUs.
+# torch==2.6.0+cpu
+# torchvision==0.21.0+cpu

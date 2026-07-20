@@ -1,0 +1,9 @@
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+This repository is a YOLO11-based application template. The complete license
+text for AGPL-3.0-or-later is available at:
+https://www.gnu.org/licenses/agpl-3.0.html
+
+This short notice does not replace the license obligations of the Ultralytics
+package or the IJmond dataset. See THIRD_PARTY_NOTICES.md.
+

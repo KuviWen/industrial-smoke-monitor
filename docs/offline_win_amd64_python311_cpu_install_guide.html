@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>隔離 Windows 電腦 Python 3.11.15 與 YOLO11 CPU 環境離線安裝操作手順</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5d6879;
+      --line: #d9e0e8;
+      --panel: #f5f8fb;
+      --blue: #1e5ea8;
+      --blue-soft: #eaf3ff;
+      --green: #16774a;
+      --green-soft: #eaf8f1;
+      --amber: #8a5700;
+      --amber-soft: #fff5db;
+      --red: #a12b2b;
+      --red-soft: #fff0f0;
+      --code: #101827;
+      --code-ink: #edf4ff;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef2f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      line-height: 1.72;
+    }
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 28px auto 72px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 50px rgba(31, 49, 75, .09);
+      overflow: hidden;
+    }
+    header {
+      padding: 42px 50px 34px;
+      color: #fff;
+      background: linear-gradient(135deg, #173c67, #1e65a5 65%, #178079);
+    }
+    header h1 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.25;
+    }
+    header p { max-width: 900px; margin: 8px 0; color: #e8f2ff; }
+    .chips { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+    .chip {
+      padding: 6px 11px;
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .meta { font-size: 14px; opacity: .92; }
+    .content { padding: 36px 50px 54px; }
+    h2 {
+      margin: 48px 0 18px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--line);
+      color: #173c67;
+      font-size: 27px;
+      line-height: 1.35;
+    }
+    h3 { margin: 32px 0 12px; color: #204f7e; font-size: 21px; }
+    h4 { margin: 24px 0 8px; font-size: 17px; }
+    p { margin: 10px 0; }
+    a { color: var(--blue); }
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #edf1f5;
+      font-family: Consolas, "Cascadia Mono", "Noto Sans Mono", monospace;
+      font-size: .94em;
+    }
+    pre {
+      position: relative;
+      margin: 13px 0 20px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      border: 1px solid #26354c;
+      border-radius: 10px;
+      color: var(--code-ink);
+      background: var(--code);
+      font: 14px/1.58 Consolas, "Cascadia Mono", "Noto Sans Mono", monospace;
+      white-space: pre;
+      tab-size: 4;
+    }
+    pre code { padding: 0; color: inherit; background: transparent; font-size: inherit; }
+    ul, ol { padding-left: 1.45rem; }
+    li { margin: 6px 0; }
+    .toc {
+      padding: 20px 24px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+    }
+    .toc h2 { margin-top: 0; font-size: 21px; border: 0; padding: 0; }
+    .toc ol { columns: 2; column-gap: 40px; margin-bottom: 0; }
+    .toc li { break-inside: avoid; }
+    .callout {
+      margin: 18px 0;
+      padding: 15px 18px;
+      border-left: 5px solid var(--blue);
+      border-radius: 8px;
+      background: var(--blue-soft);
+    }
+    .callout strong { display: inline-block; margin-right: 4px; }
+    .callout.warning { border-color: #e1a32f; background: var(--amber-soft); color: #664300; }
+    .callout.danger { border-color: #cc4b4b; background: var(--red-soft); color: #7e2222; }
+    .callout.success { border-color: #31a26c; background: var(--green-soft); color: #145f3d; }
+    .phase {
+      display: inline-block;
+      margin-right: 8px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      color: #fff;
+      background: var(--blue);
+      font-size: 13px;
+      letter-spacing: .04em;
+      vertical-align: 3px;
+    }
+    table {
+      width: 100%;
+      margin: 16px 0 24px;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+    th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #173c67; background: #eef4fa; }
+    tbody tr:nth-child(even) { background: #fafbfd; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { position: relative; padding-left: 29px; margin: 10px 0; }
+    .checklist li::before {
+      position: absolute;
+      left: 0;
+      top: .3em;
+      width: 17px;
+      height: 17px;
+      border: 2px solid #7890a8;
+      border-radius: 4px;
+      content: "";
+      background: #fff;
+    }
+    .tree {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fafbfd;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      white-space: pre-wrap;
+    }
+    .small { color: var(--muted); font-size: 14px; }
+    .page-break { break-before: page; }
+    footer {
+      padding: 25px 50px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: #f7f9fb;
+      font-size: 14px;
+    }
+    @media (max-width: 760px) {
+      main { width: 100%; margin: 0; border: 0; border-radius: 0; }
+      header, .content, footer { padding-left: 22px; padding-right: 22px; }
+      .toc ol { columns: 1; }
+      table { display: block; overflow-x: auto; }
+    }
+    @media print {
+      body { background: #fff; }
+      main { width: 100%; margin: 0; border: 0; box-shadow: none; }
+      header { color: #111; background: #fff; border-bottom: 3px solid #173c67; }
+      header p { color: #333; }
+      .chip { color: #111; border-color: #999; background: #fff; }
+      .content { padding: 18px 0; }
+      footer { padding: 16px 0; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #111; background: #f5f5f5; border-color: #aaa; }
+      a { color: #111; text-decoration: none; }
+      h2, h3 { break-after: avoid; }
+      pre, table, .callout { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="meta">文件版本 2.4 ｜ 2026-07-19</div>
+    <h1>隔離 Windows 電腦<br>Python 3.11.15 與 YOLO11 CPU 環境離線安裝操作手順</h1>
+    <p>在可連網的 Linux 電腦上準備 Windows AMD64 專用 Conda 套件與 Python wheel，再於隔離外網的 Windows 電腦透過 Anaconda Prompt 建立環境並完成離線安裝。</p>
+    <div class="chips">
+      <span class="chip">準備端：Linux</span>
+      <span class="chip">目標端：Windows win-amd64</span>
+      <span class="chip">Python 3.11.15</span>
+      <span class="chip">PyTorch 2.6.0 CPU</span>
+      <span class="chip">Ultralytics YOLO11</span>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="callout success">
+      <strong>本文件涵蓋現場執行：</strong>這是「現場仍要安裝 Python／Conda」的完整離線安裝手順。即使現場只做推論、不重新訓練，仍需依本文件建立 Python 3.11.15 環境，並在完成後執行模型、RTSP 與 Email 驗收。
+    </div>
+    <div class="callout">
+      <strong>先理解模型：</strong>需要先認識 YOLO11 的模型任務、預訓練、評估指標與部署格式時，請參考 <a href="../intro_YOLO11/">YOLO11 特色與工作原理導覽</a>。
+    </div>
+    <section class="toc" aria-label="目錄">
+      <h2>目錄</h2>
+      <ol>
+        <li><a href="#scope">目的、範圍與重要原則</a></li>
+        <li><a href="#requirements">確認 requirements</a></li>
+        <li><a href="#linux">Linux 連網電腦：建立離線包</a></li>
+        <li><a href="#transfer">跨網域傳輸與完整性檢查</a></li>
+        <li><a href="#windows">Windows 隔離電腦：離線安裝</a></li>
+        <li><a href="#verify">安裝驗證與 YOLO 測試</a></li>
+        <li><a href="#records">保存版本紀錄</a></li>
+        <li><a href="#troubleshooting">常見錯誤排除</a></li>
+        <li><a href="#acceptance">完工驗收清單</a></li>
+      </ol>
+    </section>
+
+    <section id="scope">
+      <h2>1. 目的、範圍與重要原則</h2>
+      <p>本手順適用於下列固定條件：</p>
+      <table>
+        <thead><tr><th>項目</th><th>固定條件</th></tr></thead>
+        <tbody>
+          <tr><td>可連網準備電腦</td><td>Linux；需有可用的 Conda，以及任一可執行 <code>python3 -m pip</code> 的既有 Python。無須另建 wheel 下載環境。</td></tr>
+          <tr><td>隔離目標電腦</td><td>Windows 64 位元，Conda 平台應顯示 <code>win-64</code>，pip 平台為 <code>win_amd64</code>。</td></tr>
+          <tr><td>Python</td><td><code>3.11.15</code></td></tr>
+          <tr><td>PyTorch</td><td><code>torch==2.6.0+cpu</code>、<code>torchvision==0.21.0+cpu</code>；不使用 CUDA。</td></tr>
+          <tr><td>正式相依檔</td><td><code>requirements.txt</code></td></tr>
+          <tr><td>開發／驗收相依檔</td><td><code>requirements-dev.txt</code>；內含 <code>-r requirements.txt</code> 並額外安裝 pytest。</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout danger">
+        <strong>禁止直接搬移 Linux 環境。</strong>
+        Linux 上建立的 Conda 環境、Python 執行檔或 <code>conda-pack</code> 壓縮檔不能交給 Windows 使用。Linux 端只能利用目標平台參數，下載 Windows 專用的 Conda 套件與 wheel。
+      </div>
+      <div class="callout warning">
+        <strong>不可只下載最上層套件。</strong>
+        Ultralytics、OpenCV、PyTorch 等均有間接相依套件；必須先針對 Windows 目標完整解析並鎖定，再下載鎖定清單內的全部 wheel，最後將整個 <code>conda_pkgs</code> 和 <code>wheelhouse</code> 帶入隔離電腦。
+      </div>
+      <div class="callout">
+        <strong>命名要求。</strong>
+        兩份檔案在整個流程中固定命名為 <code>requirements.txt</code> 與 <code>requirements-dev.txt</code>，並放在同一資料夾。不要改成 <code>requirements-win.txt</code> 或其他名稱。
+      </div>
+    </section>
+
+    <section id="requirements">
+      <h2>2. 確認 requirements</h2>
+      <h3>2.1 requirements.txt</h3>
+      <p>母專案根目錄的 <code>requirements.txt</code>（GPU 預設版）應為以下內容：</p>
+      <pre><code># Install a CUDA-compatible torch/torchvision build first on a GPU training PC.
+# The exact torch wheel must match the installed NVIDIA driver and the chosen
+# CUDA runtime. The field PC can use the same environment or a CPU-only build.
+ultralytics&gt;=8.3.0,&lt;9.0
+opencv-python&gt;=4.9.0,!=4.13.0.90
+numpy==1.26
+PyYAML&gt;=6.0
+python-dotenv&gt;=1.0
+Pillow&gt;=10.0
+
+# Annotate the following lines if no GPUs.
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+
+# Un-annotate the following lines if no GPUs.
+# torch==2.6.0+cpu
+# torchvision==0.21.0+cpu</code></pre>
+
+      <p>本手順的目標端是沒有 GPU 的 Windows CPU 電腦。下方 3.1 把檔案複製到 bundle 後、執行 uv 解析或 pip 下載前，會先把 CUDA 行註解並取消 CPU 行的註解；執行切換命令時請先位於該 bundle 目錄，不要直接修改 Git repository 的根目錄檔案。</p>
+      <pre><code>sed -i \
+  -e 's/^torch==2.6.0+cu124$/# torch==2.6.0+cu124/' \
+  -e 's/^torchvision==0.21.0+cu124$/# torchvision==0.21.0+cu124/' \
+  -e 's/^# torch==2.6.0+cpu$/torch==2.6.0+cpu/' \
+  -e 's/^# torchvision==0.21.0+cpu$/torchvision==0.21.0+cpu/' \
+  "requirements.txt"</code></pre>
+      <p class="small">這個切換只改離線 bundle 內的副本，不會改 Git repository 的根目錄檔案。切換後有效的 Torch 版本是 <code>torch==2.6.0+cpu</code> 與 <code>torchvision==0.21.0+cpu</code>；<code>numpy==1.26</code> 與標準 <code>opencv-python</code> 則維持不變。</p>
+
+      <h3>2.2 requirements-dev.txt</h3>
+      <pre><code>-r requirements.txt
+pytest&gt;=8.0</code></pre>
+
+      <div class="callout success">
+        <strong>檔案狀態正確。</strong>
+        新版 requirements 使用標準 <code>opencv-python</code>、固定 <code>numpy==1.26</code>，並把 GPU／CPU 的 Torch 選項放在同一份 <code>requirements.txt</code>。本流程不需要另外建立 Torch requirements 檔。
+      </div>
+      <div class="callout">
+        requirements 開頭三行仍在說明 GPU 訓練電腦的選版原則，但註解不會參與 pip 解析；完成上方切換後，真正生效的是檔案末尾的 <code>torch==2.6.0+cpu</code> 與 <code>torchvision==0.21.0+cpu</code>，因此本手順建立的是純 CPU 環境。
+      </div>
+      <p>若瀏覽器下載後自動加上 <code>(2)</code> 等後綴，進入操作流程前必須重新命名回上述兩個標準名稱。</p>
+    </section>
+
+    <section id="linux" class="page-break">
+      <h2><span class="phase">階段 A</span>3. Linux 連網電腦：建立離線包</h2>
+
+      <h3>3.1 建立工作目錄並放入 requirements</h3>
+      <p>以下命令使用 Bash。先建立固定目錄：</p>
+      <pre><code>WORK="$HOME/offline_build"
+BUNDLE="$WORK/offline-smoke-win64-py31115-cpu"
+
+mkdir -p "$BUNDLE/conda_pkgs"
+mkdir -p "$BUNDLE/wheelhouse"</code></pre>
+
+      <p>把附件複製到 bundle，並確保名稱正確。請將來源路徑替換成實際位置：</p>
+      <pre><code>cp "/path/to/requirements.txt" "$BUNDLE/requirements.txt"
+cp "/path/to/requirements-dev.txt" "$BUNDLE/requirements-dev.txt"</code></pre>
+
+      <p>如果下載後檔名含有 <code>(2)</code>，可直接在複製時改回標準名稱：</p>
+      <pre><code>cp "/path/to/requirements(2).txt" "$BUNDLE/requirements.txt"
+cp "/path/to/requirements-dev(2).txt" "$BUNDLE/requirements-dev.txt"</code></pre>
+
+      <p>現在進入 bundle 目錄，執行 2.1 顯示的 CPU Torch 切換命令；該命令的最後一個檔名是 <code>requirements.txt</code>，所以只會修改 bundle 副本：</p>
+      <pre><code>cd "$BUNDLE"</code></pre>
+
+      <p>確認兩個檔案存在且位於同一資料夾：</p>
+      <pre><code>ls -l "$BUNDLE/requirements.txt" "$BUNDLE/requirements-dev.txt"
+sed -n '1,120p' "$BUNDLE/requirements.txt"
+sed -n '1,80p' "$BUNDLE/requirements-dev.txt"</code></pre>
+
+      <h3>3.2 確認 Linux 端 Conda</h3>
+      <pre><code>conda --version
+conda info</code></pre>
+      <p>這裡顯示 Linux 平台是正常的；後續命令會另外指定目標平台 <code>win-64</code>。</p>
+
+      <h3>3.3 下載 Windows AMD64 的 Python 3.11.15 Conda 套件</h3>
+      <p>指定獨立套件快取，確保帶走的是本次完整下載結果：</p>
+      <pre><code>export CONDA_PKGS_DIRS="$BUNDLE/conda_pkgs"</code></pre>
+
+      <div class="callout warning">
+        <strong>若正在重做 3.3，先使用全新的 <code>conda_pkgs</code>。</strong>
+        不要把不同求解結果累積在同一資料夾。可先把舊資料夾重新命名保留，再建立空白資料夾：
+        <pre><code>mv "$BUNDLE/conda_pkgs" \
+  "$BUNDLE/conda_pkgs.previous-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BUNDLE/conda_pkgs"
+export CONDA_PKGS_DIRS="$BUNDLE/conda_pkgs"</code></pre>
+        第一次執行且資料夾原本為空時，不需執行這一段。
+      </div>
+
+      <p>跨平台解析並下載 Windows 套件；<code>--download-only</code> 會在下載完成後停止，不會嘗試於 Linux 執行 Windows Python：</p>
+      <pre><code>conda create \
+  -n _download_win31115 \
+  --platform win-64 \
+  --download-only \
+  --override-channels \
+  -c defaults \
+  --no-default-packages \
+  python=3.11.15 \
+  pip \
+  setuptools \
+  wheel \
+  -y</code></pre>
+
+      <p>下載完成後取消臨時環境變數：</p>
+      <pre><code>unset CONDA_PKGS_DIRS</code></pre>
+
+      <div class="callout">
+        若 Conda 回報不認得 <code>--platform</code>，把該參數替換成 <code>--subdir win-64</code> 後重試；其餘參數不變。
+      </div>
+
+      <p>確認 Python 3.11.15 套件和其他 Conda 套件封裝檔已下載：</p>
+      <pre><code>find "$BUNDLE/conda_pkgs" -maxdepth 1 \
+  -name 'python-3.11.15-*' -print
+
+find "$BUNDLE/conda_pkgs" -maxdepth 1 -type f \
+  \( -name '*.conda' -o -name '*.tar.bz2' \) | wc -l</code></pre>
+      <p>第一段必須找到 Python 3.11.15；第二段數量必須大於 0。</p>
+
+      <h3>3.4 準備 Linux 建包工具（不建立 Conda 環境）</h3>
+      <p><code>uv pip compile</code> 只解析並輸出鎖定檔，不會安裝套件到目前 Python，因此不需要另外建立 <code>wheel_downloader</code> Conda 環境。把新版 pip 與 uv 安裝到 bundle 外的私有工具目錄即可：</p>
+      <pre><code>TOOLS="$WORK/linux_build_tools"
+MODULES="$TOOLS/python_modules"
+UV_CACHE="$WORK/linux_uv_cache"
+mkdir -p "$MODULES" "$UV_CACHE"
+
+python3 --version
+python3 -m pip --version
+
+python3 -m pip install \
+  --upgrade \
+  --no-cache-dir \
+  --target "$MODULES" \
+  pip \
+  uv
+
+PYTHONPATH="$MODULES" \
+python3 -m pip --version
+
+UV_CACHE_DIR="$UV_CACHE" \
+PYTHONPATH="$MODULES" \
+python3 -m uv --version</code></pre>
+      <div class="callout success">
+        <strong>不修改 Conda base，也不建立新環境。</strong>
+        <code>--target "$MODULES"</code> 只把新版 pip 與 Linux 版 uv 放入本次工作目錄；<code>TOOLS</code> 位於 bundle 外，因此不會被打包帶入 Windows。後續下載也使用這份私有 pip，不受 Linux 系統 pip 版本影響。
+      </div>
+      <div class="callout">
+        <strong>不要直接輸入 <code>uv</code>。</strong>
+        後續固定透過 <code>PYTHONPATH="$MODULES"</code> 執行私有 pip/uv，因此不依賴 Bash 的 <code>PATH</code>。uv 快取也固定放在可寫入的 <code>UV_CACHE</code>。若主機只有 <code>python</code> 而沒有 <code>python3</code>，本節及後續 Linux 命令中的 <code>python3</code> 全部一致替換成 <code>python</code>。
+      </div>
+
+      <h3>3.5 先鎖定 Windows 相依，再下載全部 wheel</h3>
+      <div class="callout danger">
+        <strong>直接用 pip 跨平台解析會誤判 Torch 條件。</strong>
+        <code>pip download --platform win_amd64</code> 會依 Windows 篩選 wheel，但套件的環境條件仍可能依執行 pip 的 Linux 主機判斷。因此 Torch 的 <code>platform_system == "Linux"</code> 條件被視為成立，接著 pip 又只准下載 Windows wheel，最後就會錯誤要求 <code>nvidia-nccl-cu12</code>。這不表示 CPU 版 Torch 需要 CUDA，也不要手動加入 NVIDIA CUDA 套件。
+      </div>
+
+      <h4>3.5.1 若舊版 Step 3.5 已失敗：先保留並隔離殘留檔案</h4>
+      <p>只有已執行過舊命令且失敗時才做這一步；新流程首次執行可跳過：</p>
+      <pre><code>mv "$BUNDLE/wheelhouse" \
+  "$BUNDLE/wheelhouse.failed-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BUNDLE/wheelhouse"</code></pre>
+      <p class="small">這是可回復的重新命名，不會刪除原本下載內容。</p>
+
+      <h4>3.5.2 用 uv 針對 Windows AMD64 / Python 3.11.15 解析完整鎖定清單</h4>
+      <pre><code>cd "$BUNDLE"
+
+UV_CACHE_DIR="$UV_CACHE" \
+PYTHONPATH="$MODULES" \
+python3 -m uv pip compile \
+  --no-python-downloads \
+  --python-version 3.11.15 \
+  --python-platform x86_64-pc-windows-msvc \
+  --default-index https://pypi.org/simple \
+  --find-links https://download.pytorch.org/whl/cpu/torch/ \
+  --find-links https://download.pytorch.org/whl/cpu/torchvision/ \
+  --only-binary :all: \
+  --output-file "$BUNDLE/requirements-win64-py311.lock" \
+  "$BUNDLE/requirements-dev.txt"</code></pre>
+
+      <p><code>x86_64-pc-windows-msvc</code> 明確代表 64 位元 Windows。uv 會使用 Windows 的環境條件完成解析，並把正式、開發及間接相依套件全部輸出成精確版本。PyPI 是唯一的一般套件索引；兩個 <code>--find-links</code> 只補充官方的 Torch 與 Torchvision CPU wheel 清單。</p>
+      <p class="small">若 Linux 現有 Python 不是 3.11.15，uv 可能提示使用現有版本作為建包工具。這不會改變目標條件：解析仍明確指定 Python 3.11.15 與 Windows AMD64，且 <code>--only-binary :all:</code> 禁止來源碼建置。</p>
+
+      <p>先確認鎖定檔包含 CPU 版 Torch，而且沒有誤列 CUDA 執行期套件：</p>
+      <pre><code>grep -E '^(torch|torchvision)==' \
+  "$BUNDLE/requirements-win64-py311.lock"
+
+grep -E '^(nvidia-(nccl|cusparselt)-cu12|triton)==' \
+  "$BUNDLE/requirements-win64-py311.lock"</code></pre>
+      <p>第一段應顯示 <code>torch==2.6.0+cpu</code> 與 <code>torchvision==0.21.0+cpu</code>；第二段應無輸出。鎖定檔出現 <code>nvidia-ml-py</code> 是 Ultralytics 的跨平台監控相依，並非 CUDA runtime，可保留。</p>
+
+      <h4>3.5.3 按鎖定清單下載 Windows wheel</h4>
+      <pre><code>PYTHONPATH="$MODULES" python3 -m pip download \
+  --dest "$BUNDLE/wheelhouse" \
+  --platform win_amd64 \
+  --python-version 311 \
+  --implementation cp \
+  --abi cp311 \
+  --abi abi3 \
+  --abi none \
+  --only-binary=:all: \
+  --no-deps \
+  --index-url https://pypi.org/simple \
+  --find-links https://download.pytorch.org/whl/cpu/torch/ \
+  --find-links https://download.pytorch.org/whl/cpu/torchvision/ \
+  -r "$BUNDLE/requirements-win64-py311.lock"</code></pre>
+
+      <p><code>requirements-dev.txt</code> 會在前一步遞迴讀取同目錄的 <code>requirements.txt</code>。uv 產生的鎖定檔已逐項列出完整相依，因此這一條命令會下載：</p>
+      <ul>
+        <li>正式環境所需的全部套件；</li>
+        <li><code>torch==2.6.0+cpu</code> 與 <code>torchvision==0.21.0+cpu</code>；</li>
+        <li>Ultralytics 的間接相依套件；</li>
+        <li>pytest 及其相依套件。</li>
+      </ul>
+
+      <div class="callout warning">
+        <strong>不要移除 <code>--no-deps</code> 或 <code>--only-binary=:all:</code>。</strong>
+        <code>--no-deps</code> 在這裡是安全且必要的，因為完整相依已由 uv 寫入鎖定檔；它可防止 pip 再次依 Linux 主機解析 Torch metadata。若 <code>--only-binary=:all:</code> 導致失敗，代表某個套件缺少目標 Windows wheel，不能在 Linux 上下載原始碼後期待 Windows 離線電腦自行編譯。
+      </div>
+
+      <h3>3.6 檢查 wheelhouse</h3>
+      <p>確認沒有誤抓 Linux 或 macOS wheel：</p>
+      <pre><code>find "$BUNDLE/wheelhouse" -maxdepth 1 -type f \
+  \( -name '*manylinux*' -o -name '*linux_*' -o -name '*macosx*' \) \
+  -print</code></pre>
+      <p>正常結果應為空白。</p>
+
+      <p>確認沒有來源封裝檔：</p>
+      <pre><code>find "$BUNDLE/wheelhouse" -maxdepth 1 -type f \
+  ! -name '*.whl' -print</code></pre>
+      <p>正常結果亦應為空白。</p>
+
+      <p>確認關鍵 Windows wheel：</p>
+      <pre><code>find "$BUNDLE/wheelhouse" -maxdepth 1 \
+  \( -iname 'torch*win_amd64.whl' \
+     -o -iname 'torchvision*win_amd64.whl' \
+     -o -iname 'opencv*win_amd64.whl' \
+     -o -iname 'numpy*win_amd64.whl' \) \
+  -print | sort</code></pre>
+
+      <p>其中應包含 CPU 版 torch/torchvision，檔名通常類似：</p>
+      <div class="tree">torch-2.6.0+cpu-cp311-cp311-win_amd64.whl
+torchvision-0.21.0+cpu-cp311-cp311-win_amd64.whl</div>
+
+      <h3>3.7 在 Linux 上進行離線 wheel 齊全性預檢</h3>
+      <p>相依關係已由 uv 針對 Windows 解析；這一步按鎖定檔逐項驗證本地 wheel 是否齊全，不會執行 Windows DLL：</p>
+      <pre><code>PYTHONPATH="$MODULES" python3 -m pip install \
+  --dry-run \
+  --ignore-installed \
+  --no-deps \
+  --no-index \
+  --find-links="$BUNDLE/wheelhouse" \
+  --platform win_amd64 \
+  --python-version 311 \
+  --implementation cp \
+  --abi cp311 \
+  --abi abi3 \
+  --abi none \
+  --only-binary=:all: \
+  -r "$BUNDLE/requirements-win64-py311.lock"</code></pre>
+
+      <h3>3.8 最終離線包結構</h3>
+      <div class="tree">offline-smoke-win64-py31115-cpu/
+├── conda_pkgs/
+│   ├── cache/
+│   ├── python-3.11.15-...
+│   ├── pip-...
+│   └── 其他 Conda 套件與封裝檔
+├── wheelhouse/
+│   ├── torch-2.6.0+cpu-...-win_amd64.whl
+│   ├── torchvision-0.21.0+cpu-...-win_amd64.whl
+│   ├── ultralytics-...
+│   ├── opencv_python-...
+│   └── 所有其他 wheel
+├── requirements-win64-py311.lock
+├── requirements.txt
+└── requirements-dev.txt</div>
+    </section>
+
+    <section id="transfer">
+      <h2><span class="phase">階段 B</span>4. 跨網域傳輸與完整性檢查</h2>
+      <h3>4.1 建立 Windows 可直接解壓的 ZIP</h3>
+      <p>使用 Python 標準函式庫建立 ZIP，不依賴 Linux 的 <code>zip</code> 命令，也不要求 Windows 提供 <code>tar</code>：</p>
+      <pre><code>cd "$WORK"
+python3 -m zipfile -c \
+  offline-smoke-win64-py31115-cpu.zip \
+  offline-smoke-win64-py31115-cpu
+
+python3 -m zipfile -t \
+  offline-smoke-win64-py31115-cpu.zip</code></pre>
+      <p>測試命令不可回報損壞或 CRC 錯誤。Python 的 ZIP64 支援可處理超過 4 GiB 的 ZIP，因此大型 Torch wheelhouse 亦可使用。</p>
+
+      <h3>4.2 產生 SHA-256</h3>
+      <pre><code>sha256sum offline-smoke-win64-py31115-cpu.zip \
+  &gt; offline-smoke-win64-py31115-cpu.zip.sha256</code></pre>
+
+      <p>透過公司核准的隨身碟或媒體帶入以下兩個檔案：</p>
+      <ul>
+        <li><code>offline-smoke-win64-py31115-cpu.zip</code></li>
+        <li><code>offline-smoke-win64-py31115-cpu.zip.sha256</code></li>
+      </ul>
+      <div class="callout warning">
+        離線包不得包含 RTSP 密碼、SMTP 密碼、API 金鑰或正式環境的 <code>configs/monitor_settings.env</code>。機敏設定應依現場資訊安全流程另外配置。
+      </div>
+    </section>
+
+    <section id="windows" class="page-break">
+      <h2><span class="phase">階段 C</span>5. Windows 隔離電腦：離線安裝</h2>
+      <p>以下所有命令均在 <strong>Anaconda Prompt</strong> 中執行。</p>
+
+      <h3>5.1 確認 Windows 與 Conda 平台</h3>
+      <pre><code>where conda
+conda --version
+conda info | findstr /I "platform"</code></pre>
+      <p>平台必須顯示：</p>
+      <pre><code>platform : win-64</code></pre>
+
+      <h3>5.2 驗證傳輸檔 SHA-256</h3>
+      <p>假設外接媒體是 <code>E:</code>：</p>
+      <pre><code>certutil -hashfile E:\offline-smoke-win64-py31115-cpu.zip SHA256
+type E:\offline-smoke-win64-py31115-cpu.zip.sha256</code></pre>
+      <p>人工比較兩者的 64 位十六進位雜湊值，必須完全相同。不同時不得繼續安裝，應重新傳輸。</p>
+
+      <h3>5.3 使用 Anaconda 的 Python 解壓至純英文路徑</h3>
+      <p>以下使用 <code>C:\Users\Public\offline-install</code>；如公司權限政策不允許，請換成其他可寫入且不含中文的本機路徑。先測試 ZIP，再以 Python 標準函式庫解壓：</p>
+      <pre><code>where python
+python -m zipfile -t E:\offline-smoke-win64-py31115-cpu.zip
+
+mkdir C:\Users\Public\offline-install
+python -m zipfile -e ^
+  E:\offline-smoke-win64-py31115-cpu.zip ^
+  C:\Users\Public\offline-install</code></pre>
+      <div class="callout success">
+        <strong>不需要 <code>tar</code> 或 7-Zip。</strong>
+        此處使用 Anaconda Prompt 原本就能執行的 base Python；<code>zipfile</code> 是 Python 3.11 標準函式庫，不需額外安裝套件或連線。
+      </div>
+      <div class="callout warning">
+        <strong>若舊版 <code>.tar.gz</code> 已經帶入隔離電腦，不必重新傳輸。</strong>
+        先完成 5.2 的 SHA-256 比對，再以 Anaconda 的 Python 標準函式庫測試及解壓：
+        <pre><code>where python
+python -m tarfile -t E:\offline-smoke-win64-py31115-cpu.tar.gz
+
+mkdir C:\Users\Public\offline-install
+python -m tarfile -e ^
+  E:\offline-smoke-win64-py31115-cpu.tar.gz ^
+  C:\Users\Public\offline-install</code></pre>
+        此段只供既有舊包應急；下次建包仍應依 4.1 使用 ZIP。
+      </div>
+
+      <p>設定本次工作變數：</p>
+      <pre><code>set "BUNDLE=C:\Users\Public\offline-install\offline-smoke-win64-py31115-cpu"
+set "SOURCE_PKGS=%BUNDLE%\conda_pkgs"</code></pre>
+
+      <p>確認必要檔案：</p>
+      <pre><code>dir "%BUNDLE%\requirements.txt"
+dir "%BUNDLE%\requirements-dev.txt"
+dir "%BUNDLE%\wheelhouse\*.whl"
+dir "%BUNDLE%\conda_pkgs\python-3.11.15*"</code></pre>
+
+      <h3>5.4 建立 Python 3.11.15 Conda 環境</h3>
+      <div class="callout danger">
+        <strong>不要再執行舊版命令。</strong>
+        若命令中仍有 <code>--use-index-cache</code>、<code>python=3.11.15</code>、<code>pip</code>、<code>setuptools</code>、<code>wheel</code>，表示仍在使用舊版 Step 5.4。該命令可能直接使用從 Linux 搬來、但在傳輸後缺檔的已解壓資料夾，因而在 <em>Verifying transaction</em> 發生 <code>CondaVerificationError</code>。以下新版流程只以原始 <code>.conda</code>／<code>.tar.bz2</code> 封裝檔建立環境。
+      </div>
+      <div class="callout">
+        <strong><code>python=3.11.15</code> 並不是要求它預先存在。</strong>
+        一般 Conda 求解中，這代表要安裝進新環境的目標版本。不過，跨作業系統搬移 package cache 後，快取 repodata 可能無法被 Windows 求解器可靠識別；本手順改由所有已下載的本地封裝檔建立 <code>@EXPLICIT</code> 清單，不再依賴離線 repodata 求解。
+      </div>
+
+      <h4>5.4.1 確認關鍵 Conda 封裝檔確實存在</h4>
+      <pre><code>dir /b "%SOURCE_PKGS%\python-3.11.15-*"
+dir /b "%SOURCE_PKGS%\pip-*"
+dir /b "%SOURCE_PKGS%\setuptools-*"
+dir /b "%SOURCE_PKGS%\wheel-*"</code></pre>
+      <p>四項都必須至少顯示一個 <code>.conda</code> 或 <code>.tar.bz2</code> 封裝檔。若任何一項顯示 <code>File Not Found</code>，代表 Linux 階段 3.3 的下載包不完整，不能靠刪除版本條件解決，必須重建並重新傳輸 Conda 套件包。</p>
+
+      <h4>5.4.2 從本地封裝檔生成 Windows 專用 explicit 清單</h4>
+      <p>來源封裝與 Conda 的執行快取分開，並以隨機尾碼強制建立全新的執行快取。這一步可避開先前報錯的已解壓套件資料夾：</p>
+      <pre><code>set "CONDA_PKGS_DIRS=%USERPROFILE%\conda_pkgs_smoke311_%RANDOM%%RANDOM%"
+mkdir "%CONDA_PKGS_DIRS%"
+echo %CONDA_PKGS_DIRS%
+
+python -c "from pathlib import Path; p=Path(r'%SOURCE_PKGS%'); f=sorted(list(p.glob('*.conda'))+list(p.glob('*.tar.bz2'))); required=('python-3.11.15-','pip-','setuptools-','wheel-'); missing=[n for n in required if not any(x.name.startswith(n) for x in f)]; assert f, 'No .conda or .tar.bz2 package archives found'; assert not missing, 'Missing package archives: '+', '.join(missing); o=Path(r'%BUNDLE%\conda-win64-explicit-local.txt'); o.write_text('@EXPLICIT\n'+'\n'.join(x.resolve().as_uri() for x in f)+'\n', encoding='utf-8'); print('package archives =', len(f)); print('explicit file =', o)"</code></pre>
+
+      <div class="callout warning">
+        <strong>不要把 <code>CONDA_PKGS_DIRS</code> 設回 <code>%SOURCE_PKGS%</code>。</strong>
+        <code>SOURCE_PKGS</code> 是唯讀來源；新的 <code>CONDA_PKGS_DIRS</code> 是讓 Conda 從原始封裝重新解壓的工作快取。若畫面中的 package location 仍指向 <code>%SOURCE_PKGS%\setuptools-..._0</code> 這種無副檔名資料夾，請中止，關閉 Anaconda Prompt 後依 5.3～5.4 重新設定變數。
+      </div>
+
+      <p>套件數必須大於 0，並確認清單包含四個關鍵套件：</p>
+      <pre><code>findstr /I "python-3.11.15-" "%BUNDLE%\conda-win64-explicit-local.txt"
+findstr /I "pip-" "%BUNDLE%\conda-win64-explicit-local.txt"
+findstr /I "setuptools-" "%BUNDLE%\conda-win64-explicit-local.txt"
+findstr /I "wheel-" "%BUNDLE%\conda-win64-explicit-local.txt"</code></pre>
+
+      <h4>5.4.3 直接從 explicit 清單建立環境</h4>
+      <pre><code>conda create ^
+  -n smoke311_cpu ^
+  --offline ^
+  --file "%BUNDLE%\conda-win64-explicit-local.txt" ^
+  -y</code></pre>
+
+      <div class="callout warning">
+        <strong>此命令不再另外寫 <code>python=3.11.15 pip setuptools wheel</code>。</strong>
+        原因不是這些規格錯誤，而是 explicit 清單已經逐一指定包含它們在內的所有確切封裝檔；Conda 的 explicit 模式不應再混用套件名稱規格。
+      </div>
+
+      <p>啟用並確認 Python：</p>
+      <pre><code>conda activate smoke311_cpu
+python --version
+where python
+python -c "import sys, platform; print(sys.executable); print(platform.machine()); print(sys.maxsize &gt; 2**32)"</code></pre>
+
+      <p>預期結果：</p>
+      <ul>
+        <li><code>Python 3.11.15</code></li>
+        <li><code>platform.machine()</code> 顯示 AMD64 或等價 x86_64 表示</li>
+        <li>最後一行為 <code>True</code>，表示 64 位元 Python</li>
+      </ul>
+
+      <h3>5.5 正式部署環境安裝</h3>
+      <p>正式現場環境使用 <code>requirements.txt</code>：</p>
+      <pre><code>python -m pip install ^
+  --no-index ^
+  --find-links="%BUNDLE%\wheelhouse" ^
+  --only-binary=:all: ^
+  -r "%BUNDLE%\requirements.txt"</code></pre>
+
+      <h3>5.6 含 pytest 的開發／驗收環境安裝</h3>
+      <p>如果此環境需要執行 pytest，請改用以下命令：</p>
+      <pre><code>python -m pip install ^
+  --no-index ^
+  --find-links="%BUNDLE%\wheelhouse" ^
+  --only-binary=:all: ^
+  -r "%BUNDLE%\requirements-dev.txt"</code></pre>
+
+      <div class="callout">
+        <strong>二擇一即可。</strong>
+        <code>requirements-dev.txt</code> 已包含 <code>-r requirements.txt</code>，因此執行開發／驗收命令時，不必先執行正式安裝命令。Linux 端 wheelhouse 已預先包含兩者所需的全部 wheel。
+      </div>
+      <div class="callout success">
+        安裝命令使用 <code>--no-index</code>，可保證 pip 不會嘗試連接 PyPI 或其他網路索引，只會使用本地 wheelhouse。
+      </div>
+    </section>
+
+    <section id="verify">
+      <h2>6. 安裝驗證與 YOLO 測試</h2>
+      <h3>6.1 相依一致性</h3>
+      <pre><code>python -m pip check</code></pre>
+      <p>預期顯示：</p>
+      <pre><code>No broken requirements found.</code></pre>
+
+      <h3>6.2 套件匯入測試</h3>
+      <pre><code>python -c "import cv2, torch, torchvision, ultralytics, numpy, yaml, dotenv; from PIL import Image; print('All imports OK')"</code></pre>
+
+      <h3>6.3 PyTorch CPU 版本測試</h3>
+      <pre><code>python -c "import torch, torchvision; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('torch.version.cuda =', torch.version.cuda); print('cuda_available =', torch.cuda.is_available()); assert torch.__version__ == '2.6.0+cpu'; assert torch.version.cuda is None; assert not torch.cuda.is_available(); print('CPU build verified')"</code></pre>
+
+      <p>預期重點：</p>
+      <pre><code>torch = 2.6.0+cpu
+torchvision = 0.21.0+cpu
+torch.version.cuda = None
+cuda_available = False
+CPU build verified</code></pre>
+
+      <div class="callout">
+        本方案使用 CPU 版 PyTorch，因此 <code>torch.cuda.is_available()</code> 為 <code>False</code> 是正確結果，不是錯誤。
+      </div>
+
+      <h3>6.4 OpenCV 與 Ultralytics 版本</h3>
+      <pre><code>python -c "import cv2, ultralytics; print('OpenCV =', cv2.__version__); print('Ultralytics =', ultralytics.__version__)"
+python -m pip list | findstr /I "opencv torch torchvision ultralytics numpy"</code></pre>
+      <p>OpenCV 套件應只有 <code>opencv-python</code>，不應同時出現 <code>opencv-python-headless</code>。</p>
+
+      <h3>6.5 pytest 驗證</h3>
+      <p>只有安裝 <code>requirements-dev.txt</code> 時執行：</p>
+      <pre><code>pytest --version</code></pre>
+
+      <h3>6.6 使用本地模型做 YOLO CPU 推論</h3>
+      <p>requirements 只包含程式套件，不包含 YOLO 權重。必須另外把訓練完成的 <code>best.pt</code> 和測試影像帶入現場。</p>
+      <p>假設：</p>
+      <ul>
+        <li>模型：<code>C:\industrial-smoke-monitor\models\best.pt</code></li>
+        <li>測試影像：<code>C:\industrial-smoke-monitor\tests\smoke_test.jpg</code></li>
+      </ul>
+      <pre><code>python -c "from ultralytics import YOLO; model=YOLO(r'C:\industrial-smoke-monitor\models\best.pt'); results=model.predict(source=r'C:\industrial-smoke-monitor\tests\smoke_test.jpg', device='cpu', save=False, verbose=False); print('result_count =', len(results)); print('YOLO CPU inference OK')"</code></pre>
+
+      <div class="callout warning">
+        模型路徑必須指向已存在的本地檔案。若只寫 <code>YOLO('yolo11n.pt')</code> 且本機沒有該檔，Ultralytics 可能嘗試連網下載，隔離環境將失敗。
+      </div>
+    </section>
+
+    <section id="records">
+      <h2>7. 保存版本紀錄</h2>
+      <p>驗收完成後，保存實際安裝結果，以便下次重建與稽核。原始的 <code>requirements.txt</code>、<code>requirements-dev.txt</code> 名稱與內容保持不變。</p>
+      <pre><code>python -m pip freeze &gt; "%BUNDLE%\installed-pip-freeze-win64-cpu.txt"
+conda list --explicit &gt; "%BUNDLE%\installed-conda-explicit-win64.txt"
+conda env export -n smoke311_cpu &gt; "%BUNDLE%\installed-environment-win64-cpu.yml"</code></pre>
+
+      <p>同時記錄：</p>
+      <ul>
+        <li>Windows 版本與更新狀態；</li>
+        <li>Anaconda／Conda 版本；</li>
+        <li>Python、torch、torchvision、Ultralytics、OpenCV 版本；</li>
+        <li>模型檔 SHA-256 與模型版本；</li>
+        <li>執行驗收日期及人員。</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting" class="page-break">
+      <h2>8. 常見錯誤排除</h2>
+      <table>
+        <thead>
+          <tr><th>錯誤／現象</th><th>可能原因</th><th>處理方式</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>'tar' is not recognized</code>／<code>tar 不是內部或外部命令</code></td>
+            <td>隔離 Windows 未提供 <code>tar.exe</code>，或它不在 <code>PATH</code>。</td>
+            <td>不要安裝額外解壓工具。既有 <code>.tar.gz</code> 可用 5.3 的 <code>python -m tarfile</code> 應急；下次依 4.1 改建 ZIP，並用 <code>python -m zipfile</code> 解壓。</td>
+          </tr>
+          <tr>
+            <td><code>bash: uv: command not found</code></td>
+            <td>直接呼叫了不在 <code>PATH</code> 的 uv 執行檔。</td>
+            <td>不必建立或啟用任何 Conda 工具環境。先重做 3.4，再透過 <code>PYTHONPATH="$MODULES" python3 -m uv ...</code> 執行，不要使用裸命令 <code>uv ...</code>。</td>
+          </tr>
+          <tr>
+            <td><code>No module named uv</code></td>
+            <td><code>MODULES</code> 未設定、私有工具目錄尚未安裝 uv，或 <code>PYTHONPATH</code> 指向錯誤。</td>
+            <td>重設 3.4 的 <code>WORK</code>、<code>TOOLS</code>、<code>MODULES</code>，重新把 <code>pip uv</code> 安裝到 <code>--target "$MODULES"</code>，再以 3.4 的版本命令確認。</td>
+          </tr>
+          <tr>
+            <td><code>Failed to initialize cache</code> 或 uv cache <code>Permission denied</code></td>
+            <td>預設的 <code>~/.cache/uv</code> 不可寫入。</td>
+            <td>依 3.4 設定 <code>UV_CACHE="$HOME/offline_build/linux_uv_cache"</code>，並在 uv 命令前保留 <code>UV_CACHE_DIR="$UV_CACHE"</code>。</td>
+          </tr>
+          <tr>
+            <td><code>PackagesNotFoundError</code> 或 Conda 找不到 Python 3.11.15</td>
+            <td>跨作業系統搬移後，Windows 求解器未能從快取 repodata 辨識套件；或離線包實際缺少封裝檔。即使畫面列出 defaults 的網址，也不代表 <code>--offline</code> 已連網。</td>
+            <td>不要刪除 <code>python=3.11.15</code> 來規避。先依 5.4.1 檢查四種封裝檔；存在時依 5.4.2～5.4.3 建立本地 <code>@EXPLICIT</code> 清單並安裝。若任何封裝檔缺失，才回 Linux 以全新的 <code>conda_pkgs</code> 重做 3.3 並重新傳輸。</td>
+          </tr>
+          <tr>
+            <td><code>CondaVerificationError</code>，並指出 <code>setuptools\_vendor\.lock</code> 或其他 manifest 路徑不存在</td>
+            <td>Conda 正在使用搬入後缺檔的「已解壓 package cache 資料夾」。這不是 Python 版本或相依求解錯誤；本例已在 <em>Solving environment</em> 完成後才失敗。</td>
+            <td>不要關閉驗證，也不要再次執行含 <code>--use-index-cache</code> 的舊命令。依 5.4.1 確認原始 <code>.conda</code>／<code>.tar.bz2</code> 封裝存在，再依 5.4.2 使用新的隨機 <code>CONDA_PKGS_DIRS</code>，最後以 5.4.3 的 <code>--file</code> 命令重新解壓並建立環境。若仍在全新快取報相同缺檔，原始封裝或傳輸檔已損壞，須重做 3.3 並重新比對 ZIP SHA-256。</td>
+          </tr>
+          <tr>
+            <td><code>No matching distribution found for torch==2.6.0+cpu</code></td>
+            <td>Linux 下載時缺少 PyTorch CPU wheel 來源，或 wheelhouse 沒有 Windows AMD64 CPU wheel。</td>
+            <td>確認 uv 與 pip 下載命令均含官方 Torch、Torchvision CPU 的兩個 <code>--find-links</code>，並檢查 <code>torch-2.6.0+cpu-...-win_amd64.whl</code>。</td>
+          </tr>
+          <tr>
+            <td><code>No matching distribution found for nvidia-nccl-cu12</code>，並顯示 <code>platform_system == "Linux"</code></td>
+            <td>在 Linux 上直接用 pip 解析 Windows Torch，相依 marker 仍依 Linux 主機判斷，與 <code>--platform win_amd64</code> 形成衝突。</td>
+            <td>不要安裝 NCCL、不要改成 CUDA Torch。依 3.5 先用 uv 的 <code>--python-platform x86_64-pc-windows-msvc</code> 產生完整鎖定檔，再以 pip <code>--no-deps</code> 下載鎖定清單。</td>
+          </tr>
+          <tr>
+            <td><code>is not a supported wheel on this platform</code></td>
+            <td>誤帶 Linux wheel、32 位元 Python，或 Python 版本不是 3.11。</td>
+            <td>確認 Conda 顯示 <code>win-64</code>、Python 是 64 位元 3.11.15，並重新以 <code>--platform win_amd64 --python-version 311</code> 下載。</td>
+          </tr>
+          <tr>
+            <td>pip 安裝時嘗試連網</td>
+            <td>漏掉 <code>--no-index</code>，或執行了普通 <code>pip install -r ...</code>。</td>
+            <td>取消命令，改用本手順的 <code>--no-index --find-links="...\wheelhouse"</code>。</td>
+          </tr>
+          <tr>
+            <td><code>Could not open requirements file: requirements.txt</code></td>
+            <td><code>requirements-dev.txt</code> 與 <code>requirements.txt</code> 不在同一資料夾，或名稱被加上 <code>(2)</code>。</td>
+            <td>確認兩者在 bundle 根目錄，且名稱完全等於 <code>requirements.txt</code> 與 <code>requirements-dev.txt</code>。</td>
+          </tr>
+          <tr>
+            <td><code>ImportError</code>、<code>DLL load failed</code></td>
+            <td>wheel 損壞、平台錯誤、Microsoft Visual C++ Runtime 缺失，或存在多套 OpenCV。</td>
+            <td>先比對 SHA-256；確認只安裝 <code>opencv-python</code>；依公司規範確認 Microsoft Visual C++ 2015–2022 x64 Redistributable 已安裝。</td>
+          </tr>
+          <tr>
+            <td><code>UnicodeDecodeError: cp950</code></td>
+            <td>繁體中文 Windows 編碼、中文路徑或套件腳本輸出編碼不一致。</td>
+            <td>使用純英文路徑；在同一 Anaconda Prompt 先執行 <code>set PYTHONUTF8=1</code> 及 <code>set PYTHONIOENCODING=utf-8</code> 後重試。</td>
+          </tr>
+          <tr>
+            <td><code>torch.cuda.is_available() == False</code></td>
+            <td>本方案安裝 CPU build。</td>
+            <td>這是預期結果，不需處理。若未來改為 GPU 部署，必須重新建立獨立 GPU wheelhouse 與環境。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="acceptance">
+      <h2>9. 完工驗收清單</h2>
+      <ul class="checklist">
+        <li>Linux 建包流程不依賴或啟用 <code>wheel_downloader</code> Conda 環境；私有 pip/uv 工具位於 bundle 外。</li>
+        <li>交付檔為 <code>.zip</code>，且已在 Linux 與 Windows 兩端通過 <code>python -m zipfile -t</code> 測試。</li>
+        <li>Linux 下載命令明確指定 Conda <code>win-64</code> 與 pip <code>win_amd64</code>。</li>
+        <li>bundle 中的檔名固定為 <code>requirements.txt</code> 與 <code>requirements-dev.txt</code>。</li>
+        <li>已由 uv 針對 <code>x86_64-pc-windows-msvc</code> 產生 <code>requirements-win64-py311.lock</code>。</li>
+        <li>鎖定檔不含 <code>nvidia-nccl-cu12</code>、<code>nvidia-cusparselt-cu12</code> 或 <code>triton</code>。</li>
+        <li>wheelhouse 不含 Linux、manylinux 或 macOS wheel，也不含來源封裝檔。</li>
+        <li>已找到 <code>torch-2.6.0+cpu</code>、<code>torchvision-0.21.0+cpu</code> 的 Windows AMD64 wheel。</li>
+        <li>傳輸前後 SHA-256 完全一致。</li>
+        <li>隔離電腦的 Conda 平台為 <code>win-64</code>。</li>
+        <li>已由 <code>conda_pkgs</code> 的封裝檔產生 <code>conda-win64-explicit-local.txt</code>，且清單包含 Python 3.11.15、pip、setuptools 與 wheel。</li>
+        <li><code>python --version</code> 顯示 <code>Python 3.11.15</code>。</li>
+        <li>pip 安裝全程使用 <code>--no-index</code>。</li>
+        <li><code>python -m pip check</code> 無破損相依套件。</li>
+        <li><code>torch.__version__</code> 為 <code>2.6.0+cpu</code>，且 <code>torch.version.cuda</code> 為 <code>None</code>。</li>
+        <li>OpenCV、Ultralytics、NumPy、PyYAML、dotenv、Pillow 均可正常 import。</li>
+        <li>已使用本地 <code>best.pt</code> 和測試影像完成一次 CPU 推論。</li>
+        <li>已輸出 pip freeze、Conda explicit list 與 environment YAML。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>10. 官方參考資料</h2>
+      <ul>
+        <li><a href="https://docs.conda.io/projects/conda/en/stable/commands/create.html">Conda：conda create、--platform、--offline、--download-only</a></li>
+        <li><a href="https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html#building-identical-conda-environments">Conda：使用 explicit spec file 建立同平台的相同環境</a></li>
+        <li><a href="https://docs.conda.io/projects/conda/en/latest/user-guide/troubleshooting.html#conda-reports-that-a-package-is-installed-but-it-appears-not-to-be">Conda：已解壓 package cache 損壞的原因與重新解壓原則</a></li>
+        <li><a href="https://docs.python.org/3.11/library/zipfile.html#command-line-interface">Python 3.11：zipfile 命令列建立、測試與解壓 ZIP</a></li>
+        <li><a href="https://docs.python.org/3.11/library/tarfile.html#command-line-interface">Python 3.11：tarfile 命令列測試與解壓既有 tar.gz</a></li>
+        <li><a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip：跨平台 pip download 與 wheelhouse</a></li>
+        <li><a href="https://docs.astral.sh/uv/getting-started/installation/">uv：PyPI 安裝方式</a></li>
+        <li><a href="https://docs.astral.sh/uv/pip/environments/">uv：pip compile 不需虛擬環境及 python -m uv 用法</a></li>
+        <li><a href="https://docs.astral.sh/uv/pip/compile/">uv：使用 uv pip compile 鎖定完整相依</a></li>
+        <li><a href="https://docs.astral.sh/uv/reference/cli/#uv-pip-compile">uv CLI：--python-platform 與 Windows AMD64 目標平台</a></li>
+        <li><a href="https://pytorch.org/get-started/previous-versions/">PyTorch：歷史版本與 CPU wheel 索引</a></li>
+        <li><a href="https://docs.ultralytics.com/quickstart/">Ultralytics：安裝與 PyTorch 選擇說明</a></li>
+        <li><a href="https://www.python.org/downloads/release/python-31115/">Python 3.11.15 發布說明</a></li>
+      </ul>
+    </section>
+  </div>
+
+  <footer>
+    本文件依指定平台與附件 requirements 產生。若 Python、torch/torchvision、Ultralytics 版本或目標作業系統改變，應重新解析並建立新的離線包，不應混用舊 wheelhouse。
+  </footer>
+</main>
+</body>
+</html>

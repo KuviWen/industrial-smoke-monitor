@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Splitter｜專案架構</title>
+  <style>
+    :root { --ink:#17202a; --muted:#5d6873; --blue:#1769aa; --line:#d8e0e7; --paper:#fff; --wash:#f4f7fa; --orange:#a55a00; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:var(--wash); font:16px/1.75 "Segoe UI", "Noto Sans TC", sans-serif; }
+    main { max-width:1080px; margin:0 auto; padding:42px 22px 72px; } article { background:var(--paper); padding:34px clamp(22px,5vw,64px); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 32px #26384a12; }
+    h1,h2,h3 { line-height:1.3; } h1 { margin-top:0; font-size:2.2rem; } h2 { margin-top:2.2rem; border-bottom:2px solid var(--line); padding-bottom:.35rem; } .lead { color:var(--muted); font-size:1.08rem; }
+    code,pre { font-family:Consolas,"Noto Sans Mono",monospace; } code { background:#edf2f6; padding:.08rem .3rem; border-radius:4px; } pre { background:#14212b; color:#e9f1f7; padding:17px; overflow:auto; border-radius:10px; line-height:1.55; }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-items:stretch; margin:20px 0; } .node { border:1px solid #b9cad8; background:#fafdff; border-radius:10px; padding:15px; text-align:center; } .arrow { display:flex; align-items:center; justify-content:center; color:var(--blue); font-size:1.5rem; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; } th,td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; } th { background:#edf3f7; } .note { border-left:4px solid var(--orange); background:#fff7e8; padding:12px 15px; }
+    @media (max-width:760px) { .flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); } article { padding:24px 18px; } }
+  </style>
+</head>
+<body><main><article>
+  <h1>Industrial Video Splitter</h1>
+  <p class="lead">本子專案把一個影片檔切成一個或多個獨立片段，方便後續交給 <code>dataset_builder/</code> 抽幀、標註與製作 YOLO11 smoke segmentation 資料。</p>
+
+  <h2>一、資料流</h2>
+  <div class="flow">
+    <div class="node"><strong>影片檔</strong><br>mp4 / avi / mov / mkv / 3gp</div><div class="arrow">→</div>
+    <div class="node"><strong>OpenCV 讀取</strong><br>取得 FPS、尺寸、影格數</div><div class="arrow">→</div>
+    <div class="node"><strong>Tkinter GUI</strong><br>預覽、選擇時間範圍</div><div class="arrow">→</div>
+    <div class="node"><strong>VideoWriter</strong><br>重新編碼為 MP4</div>
+  </div>
+  <p class="note"><strong>限制：</strong>OpenCV 的 VideoWriter 只寫影像串流，這個工具不複製音訊。輸出的片段適合影像資料製作；需要保留音訊時應使用獨立的 FFmpeg 流程。</p>
+
+  <h2>二、目錄結構</h2>
+  <pre>video_splitter/
+├── README.md
+├── .python-version                 # 3.11.15
+├── requirements.txt
+├── pyproject.toml
+├── docs/
+│   ├── architecture.html           # 本文件
+│   └── operations.html             # 操作說明書
+├── gui/video_splitter_gui.py       # GUI 入口
+├── src/video_splitter/
+│   ├── __init__.py
+│   └── core.py                     # 時間碼、切割範圍、輸出核心
+├── data/output/.gitkeep            # 輸出資料夾佔位
+└── tests/test_core.py              # 不需影片檔的核心測試</pre>
+
+  <h2>三、兩種切割模式</h2>
+  <table><thead><tr><th>模式</th><th>輸入</th><th>結果</th><th>適用情境</th></tr></thead><tbody>
+    <tr><td>單段</td><td>開始時間、結束時間</td><td>一個 <code>prefix_0001.mp4</code></td><td>只保留某次冒煙事件或一段特定畫面</td></tr>
+    <tr><td>批次</td><td>開始/結束範圍、每段長度、起點間隔</td><td>多個連續片段</td><td>把長時間錄影切成容易人工檢查的小段</td></tr>
+  </tbody></table>
+  <p>批次模式中，起點間隔等於每段長度時不重疊；起點間隔小於每段長度時會產生重疊片段。最後不足一個完整長度的尾段也會輸出，只要仍至少包含一個影格。</p>
+
+  <h2>四、核心模組責任</h2>
+  <table><thead><tr><th>模組</th><th>責任</th></tr></thead><tbody>
+    <tr><td><code>read_video_info</code></td><td>檢查影片是否可開啟，取得寬、高、FPS、影格數與總長度。</td></tr>
+    <tr><td><code>parse_timecode</code> / <code>format_timecode</code></td><td>在秒數與 <code>HH:MM:SS.mmm</code> 之間轉換，避免 GUI 直接處理字串細節。</td></tr>
+    <tr><td><code>build_segments</code></td><td>驗證起訖範圍並建立單段或批次的半開區間 <code>[start, end)</code>。</td></tr>
+    <tr><td><code>split_video</code></td><td>依影格索引讀取並用 VideoWriter 輸出；支援進度回報、覆寫控制與取消事件。</td></tr>
+    <tr><td><code>video_splitter_gui.py</code></td><td>只負責操作畫面與背景執行緒，不把 GUI 事件與影片切割演算法混在一起。</td></tr>
+  </tbody></table>
+
+  <h2>五、和資料製作子專案的關係</h2>
+  <pre>video_splitter GUI 輸出 .mp4
+        ↓
+dataset_builder/scripts/extract_frames.py
+        ↓
+dataset_builder/gui/annotator_gui.py
+        ↓
+data/processed/video_yolo/</pre>
+  <p>切割器不會替影片標註煙霧，也不會修改母專案模型。它只負責把長影片整理成可管理的來源片段。</p>
+</article></main></body>
+</html>

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>工業煙囪冒煙監測系統－訓練與部署操作書</title>
+  <style>
+    :root { --ink:#1f2937; --muted:#64748b; --brand:#1d4ed8; --brand2:#dbeafe; --green:#dcfce7; --amber:#fef3c7; --red:#fee2e2; --line:#cbd5e1; --paper:#fff; --bg:#f1f5f9; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif; line-height:1.75; }
+    main { max-width:1160px; margin:0 auto; background:var(--paper); padding:42px 58px 70px; }
+    h1 { margin:0 0 8px; color:#172554; font-size:2.15rem; line-height:1.25; }
+    h2 { margin-top:2.5rem; padding-bottom:6px; border-bottom:2px solid #bfdbfe; color:#1e40af; }
+    h3 { color:#334155; margin-top:1.55rem; }
+    p, li { max-width:98ch; }
+    .subtitle { color:var(--muted); margin-top:0; }
+    .step { counter-increment:step; position:relative; border-left:5px solid #60a5fa; padding:14px 18px; margin:17px 0; background:#eff6ff; border-radius:0 9px 9px 0; }
+    .step::before { content:"步驟 " counter(step); display:block; color:#1d4ed8; font-weight:800; margin-bottom:3px; }
+    .steps { counter-reset:step; }
+    .notice { padding:16px 18px; border-left:5px solid #f59e0b; background:var(--amber); border-radius:8px; }
+    .danger { padding:16px 18px; border-left:5px solid #dc2626; background:var(--red); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; margin:14px 0 22px; font-size:.95rem; }
+    th, td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; }
+    th { background:#f8fafc; color:#334155; }
+    code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.91em; }
+    pre { background:#0f172a; color:#e2e8f0; padding:16px; border-radius:9px; overflow:auto; line-height:1.5; }
+    .copy { color:#64748b; font-size:.9rem; }
+    .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+    .card { border:1px solid var(--line); border-radius:10px; padding:15px 17px; }
+    details { border:1px solid var(--line); border-radius:8px; padding:8px 13px; margin:9px 0; }
+    summary { cursor:pointer; font-weight:700; color:#334155; }
+    footer { border-top:1px solid var(--line); margin-top:38px; padding-top:16px; color:var(--muted); font-size:.9rem; }
+    @media (max-width:700px) { main { padding:28px 20px 48px; } h1 { font-size:1.7rem; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>工業煙囪冒煙監測系統：從訓練到部署操作書</h1>
+  <p class="subtitle">適用於 YOLO11-seg、IJmond Industrial Smoke Segmentation Dataset、RTSP 攝影機與 Email 告警。指令預設在專案根目錄執行；Windows PowerShell 與 Linux shell 都可使用，路徑分隔符號依作業系統調整。</p>
+
+  <div class="notice"><strong>最重要的部署觀念：</strong>將工作分成兩台電腦。訓練電腦可以連外，用來取得資料集、Python 套件與初始 YOLO11 權重；現場電腦可以不連外，只需存取內部 RTSP 攝影機與內部 SMTP relay。把模型與已驗證的 Python 套件以受控媒介帶進現場。</div>
+  <p class="notice"><strong>Windows 離線 CPU 安裝：</strong>若目標是 Windows AMD64、Python 3.11.15 的隔離電腦，請先閱讀 <a href="offline_win_amd64_python311_cpu_install_guide.html">Python 3.11.15 與 YOLO11 CPU 離線安裝手順</a>。主專案 <code>requirements.txt</code> 同時保留 GPU 與 CPU 選項；CPU 安裝前必須將 CUDA torch 行註解，並取消 CPU torch 行的註解。</p>
+  <p class="notice"><strong>模型入門：</strong>如果你還不熟悉 YOLO11 的 Detect、Segment、訓練、mAP 與部署格式，請先閱讀 <a href="../intro_YOLO11/">YOLO11 特色與工作原理導覽</a>；本操作書再說明這些概念如何套用到煙囪冒煙監測。</p>
+
+  <h2>0. 你需要先知道的名詞</h2>
+  <table>
+    <thead><tr><th>名詞</th><th>白話解釋</th></tr></thead>
+    <tbody>
+      <tr><td>影格 frame</td><td>影片中的一張圖片。程式不是一次理解整段影片，而是逐張或每隔幾張取圖。</td></tr>
+      <tr><td>ROI</td><td>Region of Interest，感興趣區域。只裁切煙囪附近，降低天空、雲、樹影與其他設備造成的誤判。</td></tr>
+      <tr><td>YOLO11-seg</td><td>可即時推論的 YOLO11 實例分割模型；除了矩形框，也能輸出煙霧的像素遮罩。</td></tr>
+      <tr><td>instance segmentation</td><td>模型不只畫矩形框，也畫出每一個煙霧區域的像素輪廓。</td></tr>
+      <tr><td>confidence</td><td>模型對「這個區域是 smoke」的信心度，不是物理上煙濃度的百分比。</td></tr>
+      <tr><td>mAP</td><td>資料集上的綜合評分；不能直接等同於你的工廠現場準確率。</td></tr>
+      <tr><td>SMTP relay</td><td>負責替程式轉送 Email 的郵件伺服器。隔離外網的電腦仍需能連到它。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="steps">
+    <h2>1. 準備 Git 專案</h2>
+    <div class="step">
+      <p>將本資料夾命名為 <code>industrial-smoke-monitor</code>，建立 Git repository。原始資料集、模型權重、密碼與現場紀錄已由 <code>.gitignore</code> 排除。</p>
+      <pre>cd industrial-smoke-monitor
+git init
+git add .
+git commit -m "Initial industrial smoke monitoring project"
+# 建立 GitHub repository 後再設定 remote 與 push</pre>
+      <p class="copy">不要把 <code>configs/monitor_settings.env</code>、<code>models/best.pt</code>、<code>data/raw</code>、<code>data/runtime</code> 加入 Git。若公司政策允許使用 Git LFS，可另外設計模型版本管理。</p>
+    </div>
+
+    <h2>2. 在訓練電腦安裝 Python 環境</h2>
+    <div class="step">
+      <p>本專案以 Python 3.11.15 為主要驗證版本。先確認 NVIDIA 驅動與 GPU：</p>
+      <pre>nvidia-smi</pre>
+      <p>建立虛擬環境：</p>
+      <pre>python -m venv .venv
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+# Linux
+source .venv/bin/activate</pre>
+      <p><code>requirements.txt</code> 預設啟用 CUDA 12.4 的 <code>torch</code>／<code>torchvision</code>，適合 GPU 訓練。若沒有 GPU，先把 <code>torch==2.6.0+cu124</code> 與 <code>torchvision==0.21.0+cu124</code> 註解，並取消 <code>torch==2.6.0+cpu</code> 與 <code>torchvision==0.21.0+cpu</code> 的註解，再安裝套件：</p>
+      <p class="copy">目前其餘核心版本也要保持一致：<code>numpy==1.26</code>，以及標準 <code>opencv-python&gt;=4.9.0,!=4.13.0.90</code>。不要在同一環境混裝 <code>opencv-python</code> 與 <code>opencv-python-headless</code>。</p>
+      <pre>python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+python -c "from ultralytics import YOLO; print('Ultralytics import OK')"</pre>
+      <p class="copy">若輸出 <code>CUDA available: False</code>，可能是 CPU 版或 GPU 驅動／CUDA 不相容。隔離 Windows CPU 電腦請依上方離線安裝手順建立環境，不要直接把 Linux 的環境或未針對 Windows 解析的 wheelhouse 搬過去。</p>
+    </div>
+
+    <h2>3. 下載並檢查 IJmond 資料集</h2>
+    <div class="step">
+      <p>從 <a href="https://uvaauas.figshare.com/articles/dataset/IJmond_Industrial_Smoke_Segmentation_Dataset/31847188">Figshare 的 IJmond dataset 頁面</a>下載 zip，放到 <code>data/raw/</code> 後解壓。建議最後的結構類似：</p>
+      <pre>data/raw/ijmond/
+└── ijmond_seg/
+    └── test/
+        └── cropped/
+            ├── images/
+            ├── masks/
+            └── splits/
+                ├── split_by_camera/
+                └── split_by_timestamp/</pre>
+      <p>資料集官方說明中，cropped image 與 mask 使用相同的檔案 stem，mask 是 8-bit：0 為背景、155 為低不透明度煙霧、255 為高不透明度煙霧。這個專案第一版將 155 與 255 合併成同一個 <code>smoke</code> 類別。</p>
+    </div>
+
+    <h2>4. 將資料集轉成 YOLO segmentation 格式</h2>
+    <div class="step">
+      <p>預設用官方 camera split。這比隨機切分更能檢查模型是否只記住某些背景；若你的研究需要時間外推，可改用 timestamp。</p>
+      <pre>python scripts/prepare_ijmond.py \
+  --input data/raw/ijmond \
+  --output data/processed/ijmond_yolo \
+  --split-strategy camera \
+  --min-component-area 20 \
+  --overwrite</pre>
+      <p>成功後應看到：</p>
+      <pre>data/processed/ijmond_yolo/
+├── images/train, images/val, images/test
+├── labels/train, labels/val, labels/test
+├── manifest.csv
+└── summary.json</pre>
+      <p>查看統計：</p>
+      <pre>python -c "import json; print(json.dumps(json.load(open('data/processed/ijmond_yolo/summary.json')), indent=2))"</pre>
+      <p class="copy">如果 summary 顯示 0 張影像，通常是 zip 多包了一層目錄、輸入路徑錯誤，或資料夾不是官方 archive。先確認存在 <code>cropped/images</code>、<code>cropped/masks</code> 與 split txt。</p>
+    </div>
+
+    <h2>5. 先以 YOLO11n-seg 建立基線</h2>
+    <div class="step">
+      <p>執行下列指令。第一次使用 <code>yolo11n-seg.pt</code> 時，Ultralytics 會在可連外的訓練電腦取得預訓練權重；如果是離線訓練，請先把該 pt 檔放入專案根目錄並將 <code>--model</code> 指向它。</p>
+      <pre>python scripts/train.py \
+  --data configs/ijmond.yaml \
+  --model yolo11n-seg.pt \
+  --epochs 100 \
+  --imgsz 640 \
+  --batch 8 \
+  --device 0 \
+  --workers 4 \
+  --patience 25 \
+  --name smoke_yolo11n</pre>
+      <p>若 GPU 顯存不足，依序嘗試：減小 <code>--batch</code>、改 <code>--imgsz 512</code>、使用 <code>yolo11n-seg</code> 而不是 s 版、關閉 cache。不要先用更大的模型解決顯存問題。</p>
+      <p>訓練結果主要在 <code>runs/train/smoke_yolo11n/</code>，最佳模型通常是：</p>
+      <pre>runs/train/smoke_yolo11n/weights/best.pt</pre>
+      <p class="copy"><code>train.py</code> 會將相對的 <code>--project</code> 路徑固定解析到專案根目錄；即使你從 <code>runs/segment</code> 等其他資料夾啟動，輸出也不會再被錯誤放到 <code>runs/segment/runs/train/</code>。</p>
+    </div>
+
+    <h2>6. 驗證模型，不要只看一個數字</h2>
+    <div class="step">
+      <p>先在官方 test split 驗證：</p>
+      <pre>python scripts/validate.py \
+  --weights runs/train/smoke_yolo11n/weights/best.pt \
+  --data configs/ijmond.yaml \
+  --split test \
+  --imgsz 640 \
+  --batch 8 \
+  --device 0</pre>
+      <p>檢查 box precision、box recall、box mAP 與 mask mAP。對告警系統來說，漏掉煙霧可能比多出少量候選更嚴重，但若 precision 太低，Email 會造成告警疲勞。因此需要用現場驗收影片重新權衡。</p>
+      <p class="notice"><strong>想知道分數代表什麼、下一步該改哪裡？</strong>請接著閱讀<a href="../supplements/training_result_evaluation_guide.html">訓練結果評估與調參指南</a>。它以本專案附上的 IJmond 100 epochs 結果為案例，示範如何看 Box／Mask 的 P、R、mAP50、mAP50-95、F1、預測圖，以及如何把模型分數轉成現場事件召回率與誤報／小時。</p>
+      <p>可用結果圖檢查遮罩是否真的蓋在煙霧上，而不是天空、建築或雲：</p>
+      <pre>yolo segment predict \
+  model=runs/train/smoke_yolo11n/weights/best.pt \
+  source=data/processed/ijmond_yolo/images/test \
+  conf=0.35 save=True</pre>
+    </div>
+
+    <h2>7. 用現場影片做部署前驗收</h2>
+    <div class="step">
+      <p>IJmond 與你的工廠在攝影機位置、煙囪外觀、季節、光線與背景上都可能不同。請先收集至少三類影片：明確冒煙、正常無煙、容易混淆（雲、蒸汽、雨、逆光、夜間）。ROI 座標可先用影像檢視工具取得。</p>
+      <pre>python scripts/replay_video.py \
+  --weights runs/train/smoke_yolo11n/weights/best.pt \
+  --source samples/chimney_day.mp4 \
+  --output data/runtime/replay_day.mp4 \
+  --roi 400,80,1500,900 \
+  --conf 0.35 \
+  --area 0.005 \
+  --sample-seconds 1 \
+  --positive-frames 5 \
+  --negative-frames 30 \
+  --device 0</pre>
+      <p>開啟輸出的 MP4，確認紅色遮罩是否覆蓋煙霧。記錄每段影片的：實際冒煙時間、模型開始告警時間、誤報次數、漏報次數、解除延遲。只有當這些數據符合現場可接受範圍，才進入部署。</p>
+    </div>
+
+    <h2>8. 將模型與環境帶到隔離現場電腦</h2>
+    <div class="step">
+      <p>將最佳權重放置為：</p>
+      <pre>models/best.pt</pre>
+      <p>如果現場電腦可以使用 GPU，訓練與現場的 PyTorch／Ultralytics 版本要固定；如果只用 CPU，請使用上方的 Windows AMD64 離線安裝手順。一般同平台環境可先下載 wheelhouse：</p>
+      <pre>mkdir wheelhouse
+python -m pip download --dest wheelhouse -r requirements.txt
+python -m pip download --dest wheelhouse -r requirements-dev.txt</pre>
+      <p>將以下內容以受控媒介複製至現場：Git 專案程式、<code>wheelhouse/</code>、<code>models/best.pt</code>，以及經 IT 核准的 <code>configs/monitor_settings.env</code> 或於現場手動建立它。不要把資料集與訓練 runs 搬到現場，除非另有資料保留需求。</p>
+      <p>現場離線安裝：</p>
+      <pre>python -m venv .venv
+# Windows
+.venv\Scripts\Activate.ps1
+# Linux
+source .venv/bin/activate
+python -m pip install --no-index --find-links wheelhouse -r requirements.txt</pre>
+      <p class="copy">若 wheelhouse 只包含 GPU 版 torch，現場 GPU／驅動必須相容。Linux 下載 Windows CPU wheel、建立 Conda Python 3.11.15 與驗證 SHA-256 的完整流程，請依離線安裝手順執行。</p>
+    </div>
+
+    <h2>9. 設定現場 <code>configs/monitor_settings.env</code></h2>
+    <div class="step">
+      <p>複製範例並逐項修改：</p>
+      <pre>copy configs/monitor_settings.env.example configs/monitor_settings.env       # Windows
+cp configs/monitor_settings.env.example configs/monitor_settings.env         # Linux</pre>
+      <table>
+        <thead><tr><th>欄位</th><th>說明</th><th>起始建議</th></tr></thead>
+        <tbody>
+          <tr><td><code>RTSP_URL</code></td><td>攝影機 RTSP 位址；密碼不要提交 Git</td><td>使用 IT／攝影機管理員提供的內部位址</td></tr>
+          <tr><td><code>MODEL_PATH</code></td><td>最佳權重</td><td><code>models/best.pt</code></td></tr>
+          <tr><td><code>ROI_XYXY</code></td><td><code>x1,y1,x2,y2</code>，座標以原始影像左上角為原點</td><td>包住煙囪出口與可能煙霧區域，留一些邊界</td></tr>
+          <tr><td><code>CONF_THRESHOLD</code></td><td>單一偵測的最低信心度</td><td>0.35；以現場驗收調整</td></tr>
+          <tr><td><code>MIN_SMOKE_AREA_RATIO</code></td><td>煙霧 mask 佔 ROI 的最低比例</td><td>0.005；小煙霧可能需降低</td></tr>
+          <tr><td><code>POSITIVE_FRAMES_TO_ALARM</code></td><td>連續 positive 幾次才告警</td><td>5（抽樣 1 秒約 5 秒）</td></tr>
+          <tr><td><code>NEGATIVE_FRAMES_TO_CLEAR</code></td><td>連續 negative 幾次才解除</td><td>30（抽樣 1 秒約 30 秒）</td></tr>
+          <tr><td><code>SHADOW_MODE</code></td><td><code>true</code> 時照常推論、記錄與保存，但抑制所有 Email</td><td>新模型上線前先用 <code>true</code> 驗證</td></tr>
+          <tr><td><code>ALLOW_LIVE_STREAMING</code></td><td>是否啟動記憶體內 MJPEG HTTP stream，不寫 live JPG</td><td>需要瀏覽器即時畫面時設 <code>true</code></td></tr>
+          <tr><td><code>LIVE_STREAM_HOST</code>、<code>LIVE_STREAM_PORT</code></td><td>串流綁定位址與連接埠</td><td><code>127.0.0.1</code>、<code>8765</code>；跨電腦觀看才考慮 <code>0.0.0.0</code></td></tr>
+          <tr><td><code>SAVE_ALERT_SNAPSHOTS</code></td><td>煙霧偵測時是否保存告警 JPG 與詳盡 JSON</td><td><code>true</code>；輸出在 <code>data/runtime/alerts</code></td></tr>
+          <tr><td><code>ALERT_SNAPSHOT_INTERVAL_SECONDS</code></td><td>連續 smoke 時保存兩筆告警的最短間隔</td><td>1.0；依磁碟容量調整</td></tr>
+          <tr><td><code>SMTP_HOST</code>、<code>SMTP_PORT</code></td><td>內部郵件 relay</td><td>由 IT 提供；不是公開信箱網站位址</td></tr>
+          <tr><td><code>SMTP_SECURITY</code></td><td><code>none</code>、<code>starttls</code> 或 <code>ssl</code></td><td>依 IT 的 SMTP relay 政策</td></tr>
+          <tr><td><code>ALERT_TO</code></td><td>逗號分隔收件人</td><td>至少一個環保／製程責任群組</td></tr>
+        </tbody>
+      </table>
+      <div class="danger"><strong>密碼安全：</strong><code>configs/monitor_settings.env</code> 內的 RTSP 密碼與 SMTP 密碼視同機密。設定檔權限只給服務帳號，備份時加密；不要貼到 GitHub、聊天紀錄、截圖或 log。</div>
+    </div>
+
+    <h2>10. 部署前測試 RTSP 與 Email</h2>
+    <div class="step">
+      <p>先測 RTSP，這一步不需要載入模型：</p>
+      <pre>python scripts/check_rtsp.py --seconds 15
+# 預期：收到 frames，並寫出 data/runtime/rtsp_test.jpg</pre>
+      <p>再測 SMTP：</p>
+      <pre>python scripts/test_email.py
+# 預期：Test email sent.</pre>
+      <p>若 RTSP 通而 Email 不通，這不是 YOLO 問題；檢查 SMTP host、port、TLS／SSL、帳密、寄件人政策、防火牆與 relay 是否允許該主機。若 Email 通而 RTSP 不通，檢查攝影機帳密、VLAN、RTSP path、codec 與 OpenCV／FFmpeg 支援。</p>
+    </div>
+
+    <h2>11. 啟動現場監測</h2>
+    <div class="step">
+      <p>先以前景方式跑，觀察 log：</p>
+      <pre>python scripts/run_monitor.py --settings configs/monitor_settings.env</pre>
+      <p>主要輸出：</p>
+      <pre>data/runtime/logs/monitor.log
+data/runtime/detections.jsonl
+data/runtime/evidence/YYYY-MM-DD/*.jpg
+data/runtime/alerts/YYYY-MM-DD/*_smoke.jpg
+data/runtime/alerts/YYYY-MM-DD/*_smoke.json
+http://127.0.0.1:8765/             # ALLOW_LIVE_STREAMING=true 時</pre>
+      <p>每個 JSONL 紀錄包含時間、分類、conf、area、ROI、box、mask polygon、alarm state、事件與 Email 成功／失敗狀態。告警 JSON sidecar 也保留相同資訊，供 <a href="../alert_reviewer/docs/operations.html">報警資料檢查／重標註 GUI</a> 使用。舊設定名 <code>SAVE_POSITIVE_SNAPSHOTS</code> 仍可相容讀取，但新設定請使用 <code>SAVE_ALERT_SNAPSHOTS</code>。</p>
+      <p class="copy"><strong>Shadow mode：</strong>將 <code>SHADOW_MODE=true</code> 後，程式會照常保存告警、更新狀態機並在 JSONL 標記 <code>suppressed_shadow_mode</code>，但不會呼叫 SMTP。確認現場結果後再改回 <code>false</code>。</p>
+      <p class="copy"><strong>Live stream：</strong>設定 <code>ALLOW_LIVE_STREAMING=true</code> 後，用瀏覽器開啟 <code>http://127.0.0.1:8765/</code>；若使用 <code>LIVE_STREAM_HOST=0.0.0.0</code>，請以現場電腦實際 IP 取代網址中的 <code>127.0.0.1</code>，並限制防火牆來源。串流只保留記憶體中的最新影格，不會產生 <code>latest.jpg</code>。</p>
+    </div>
+
+    <h2>12. 用 GUI 複核告警與回送資料集</h2>
+    <div class="step">
+      <p>告警影像與訓練資料集是兩個不同位置。安裝輕量依賴並啟動 GUI：</p>
+      <pre>python -m pip install -r alert_reviewer/requirements.txt
+python alert_reviewer/gui/alert_reviewer_gui.py \
+  --input data/runtime/alerts \
+  --dataset data/processed/field_yolo \
+  --split train</pre>
+      <p>在影像上檢查原模型的 ROI、box、mask、conf、area、cls，必要時重畫 polygon，再選 <code>smoke</code> 或 <code>no_smoke</code>。完成後可以保留在原地、移動到 YOLO train/val/test，或刪除。GUI 不會載入模型，也不會寄 Email。</p>
+      <p class="copy">移動成功後才會移除該筆告警 JPG／JSON；刪除前請確認已有備份。把資料送回訓練前，按攝影機／日期／影片重新規劃 split，避免連續影格洩漏。</p>
+      <p>完整操作請閱讀 <a href="../alert_reviewer/docs/operations.html">alert_reviewer 操作說明</a>；子專案架構見 <a href="../alert_reviewer/docs/architecture.html">alert_reviewer 架構</a>。</p>
+    </div>
+
+    <h2>13. 設定成開機自動啟動</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Linux systemd</h3>
+        <p>建立專用帳號與目錄，把專案放在 <code>/opt/industrial-smoke-monitor</code>，確認 service 內的 Python 路徑與 <code>configs/monitor_settings.env</code> 位置後：</p>
+        <pre>sudo cp deploy/smoke-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now smoke-monitor
+sudo systemctl status smoke-monitor
+sudo journalctl -u smoke-monitor -f</pre>
+      </div>
+      <div class="card">
+        <h3>Windows</h3>
+        <p>以 PowerShell 執行安裝腳本；離線時指定 wheelhouse：</p>
+        <pre>Set-ExecutionPolicy -Scope Process Bypass
+.\deploy\install_windows.ps1 -Wheelhouse .\wheelhouse
+.\deploy\run_windows.ps1</pre>
+        <p>前景驗證正常後，用工作排程器以專用服務帳號啟動 <code>deploy\run_windows.ps1</code>，設定「開機時執行」、「失敗後重新啟動」與工作目錄。</p>
+      </div>
+    </div>
+
+    <h2>14. 門檻調整方法</h2>
+    <div class="step">
+      <p>一次只改一個因素，使用同一批已標記影片比較。建議順序：</p>
+      <ol>
+        <li>先固定 ROI，排除天空與非煙囪區域；</li>
+        <li>用 <code>CONF_THRESHOLD</code> 調整模型嚴格度；</li>
+        <li>用 <code>MIN_SMOKE_AREA_RATIO</code> 排除太小的雜訊；</li>
+        <li>用 <code>POSITIVE_FRAMES_TO_ALARM</code> 抑制短暫誤判；</li>
+        <li>用 <code>NEGATIVE_FRAMES_TO_CLEAR</code> 避免煙霧短暫消失就解除；</li>
+        <li>仍漏檢時，加入現場資料重新標註與微調，或比較 YOLO11s-seg。</li>
+      </ol>
+      <table>
+        <thead><tr><th>現象</th><th>優先處理</th></tr></thead>
+        <tbody>
+          <tr><td>雲、蒸汽或樹影常誤報</td><td>縮小／修正 ROI、提高 confidence 或 area、增加連續 positive 門檻、補充 hard negative 標註資料。</td></tr>
+          <tr><td>很淡的煙霧漏檢</td><td>確認標註是否包含淡煙、降低 confidence／area、提高影像尺寸，並以現場資料微調。</td></tr>
+          <tr><td>告警開始太慢</td><td>降低 positive frames 或縮短抽樣間隔，但要重新估計誤報率。</td></tr>
+          <tr><td>告警解除太快</td><td>增加 negative frames；不要把模型每一次短暫 negative 都直接當作無煙。</td></tr>
+          <tr><td>每秒寄信</td><td>確認 <code>ALERT_REPEAT_SECONDS</code> 與程式是否正常進入 ALARM；預設只在開始與冷卻後提醒。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>15. 維運、備份與版本回復</h2>
+    <div class="step">
+      <ul>
+        <li>每天或每週備份 <code>data/runtime/detections.jsonl</code>、告警 evidence 與 <code>configs/monitor_settings.env</code>（加密）；</li>
+        <li>每次換模型使用版本名，例如 <code>smoke_yolo11n_20260717_v001.pt</code>，並在變更紀錄記下資料集、權重、門檻與驗證結果；</li>
+        <li>新模型先在 replay video 與現場 shadow mode 驗證，再取代 <code>models/best.pt</code>；</li>
+        <li>保留上一版可運作模型，以便把 <code>MODEL_PATH</code> 改回去；</li>
+        <li>監看 RTSP 斷線、模型 inference error、SMTP failed 與磁碟剩餘容量。</li>
+      </ul>
+      <p>本專案會保留候選影像，但不會自動把未經人工確認的資料拿來重訓。自動自我訓練可能把誤判放大，應由人員標註後再建立新版本。</p>
+    </div>
+  </div>
+
+  <h2>16. 常見問題</h2>
+  <details><summary>為什麼完全隔離外網仍然要求 SMTP？</summary><p>Email 本身是一種網路服務。可以不連外網，但必須存在一條到內部 SMTP relay 的路徑；若連內部郵件伺服器也沒有，程式無法把訊息送出，只能先寫入本地 outbox 或由其他系統轉送。</p></details>
+  <details><summary>OpenCV 顯示無法開啟 RTSP，應先改模型嗎？</summary><p>不用。先用 <code>check_rtsp.py</code>、檢查 IP／帳密／path、VLAN、防火牆與 codec。這是串流連線問題，不是 YOLO 訓練問題。程式預設要求 RTSP over TCP，因為在工業網路通常比 UDP 穩定。</p></details>
+  <details><summary>IJmond 的 camera split 分數很高，代表現場一定準嗎？</summary><p>不代表。camera split 只說明在 IJmond 的攝影機分布下泛化能力較好；你的煙囪、鏡頭與天氣仍是 domain shift。現場影片驗收與本地微調是必要步驟。</p></details>
+  <details><summary>要不要把低煙與高煙分成兩個類別？</summary><p>若目前只需「有沒有冒煙」，合併成一類更簡單。若之後要做不透明度分級，應重新設計標註規則、類別不平衡處理與法規驗證，不要直接把第一版的 confidence 當成不透明度百分比。</p></details>
+  <details><summary>怎麼知道告警真的寄出去了？</summary><p>使用 <code>test_email.py</code> 做部署前測試，並查看 <code>detections.jsonl</code> 中的 <code>email_events</code> 與 <code>monitor.log</code>。實務上仍應由收件端確認郵件是否進入信箱或被 relay 拒收。</p></details>
+
+  <h2>17. GitHub、資料集與授權</h2>
+  <div class="step">
+    <p>本 repository 只放程式、設定範例、文件與測試，不放原始 IJmond zip、公司攝影機影像、RTSP 密碼、SMTP 密碼與大型權重。IJmond 使用 CC BY 4.0，請在報告與 README 保留作者、資料集 DOI 與 technical report 引用。Ultralytics YOLO11 的 AGPL／Enterprise 授權選擇則需由公司在商業部署前確認。</p>
+    <p>參考：</p>
+    <ul>
+      <li><a href="https://docs.ultralytics.com/models/yolo11">YOLO11 官方文件</a></li>
+      <li><a href="https://docs.ultralytics.com/tasks/segment">YOLO instance segmentation 官方文件</a></li>
+      <li><a href="https://uvaauas.figshare.com/articles/dataset/IJmond_Industrial_Smoke_Segmentation_Dataset/31847188">IJmond Figshare</a></li>
+      <li><a href="https://arxiv.org/abs/2603.23754">IJmond technical report</a></li>
+    </ul>
+  </div>
+
+  <footer>完成部署的判準不是「程式成功啟動」，而是：RTSP 能長時間穩定取流、模型在現場影片的漏報／誤報符合需求、SMTP 收件端確認可達、服務重啟後能自動恢復、紀錄與證據影像有備份策略。</footer>
+</main>
+</body>
+</html>

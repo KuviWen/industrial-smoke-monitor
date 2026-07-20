@@ -1,0 +1,5 @@
+# Python 3.11 GUI environment. Tkinter is included with the standard Windows installer.
+opencv-python>=4.9.0,!=4.13.0.90
+numpy==1.26
+PyYAML>=6.0
+Pillow>=10.0

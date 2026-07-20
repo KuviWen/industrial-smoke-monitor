@@ -1,0 +1,5 @@
+# Uses packages already present in the parent Windows/Anaconda environment.
+# Tkinter is included with the standard Python Windows installation.
+opencv-python>=4.9.0,!=4.13.0.90
+numpy==1.26
+Pillow>=10.0

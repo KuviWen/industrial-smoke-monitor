@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dataset Builder｜操作說明書</title>
+  <style>
+    :root { --ink:#17202a; --muted:#5d6873; --blue:#1769aa; --line:#d8e0e7; --paper:#fff; --wash:#f4f7fa; --warn:#9a5b00; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:var(--wash); font:16px/1.75 "Segoe UI", "Noto Sans TC", sans-serif; }
+    main { max-width:1100px; margin:0 auto; padding:42px 22px 72px; } article { background:var(--paper); padding:34px clamp(22px, 5vw, 64px); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 32px #26384a12; }
+    h1,h2,h3 { line-height:1.3; } h1 { margin-top:0; font-size:2.2rem; } h2 { margin-top:2.2rem; border-bottom:2px solid var(--line); padding-bottom:.35rem; } h3 { margin-top:1.5rem; }
+    .lead { color:var(--muted); font-size:1.08rem; } code, pre { font-family:Consolas, "Noto Sans Mono", monospace; } code { background:#edf2f6; padding:.08rem .3rem; border-radius:4px; }
+    pre { background:#14212b; color:#e9f1f7; padding:17px; overflow:auto; border-radius:10px; line-height:1.55; } .step { border-left:4px solid var(--blue); padding:3px 0 3px 18px; margin:22px 0; } .note { border-left:4px solid var(--warn); background:#fff7e8; padding:12px 15px; } .ok { border-left-color:#16794a; background:#effaf4; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; } th,td { border:1px solid var(--line); padding:9px 11px; vertical-align:top; text-align:left; } th { background:#edf3f7; } li { margin:4px 0; }
+    @media (max-width:760px) { article { padding:24px 18px; } }
+  </style>
+</head>
+<body><main><article>
+  <h1>Industrial Smoke Dataset Builder 操作說明書</h1>
+  <p class="lead">目標：把一支或多支影片中的煙囪畫面，整理成母專案可直接訓練的 YOLO11 segmentation 資料。以下命令以 Windows Anaconda Prompt、母專案根目錄為例。</p>
+
+  <h2>0. 先理解兩種資料夾</h2>
+  <table><thead><tr><th>資料夾</th><th>用途</th><th>能不能直接拿去訓練</th></tr></thead><tbody>
+    <tr><td><code>dataset_builder/data/staging</code></td><td><code>extract_frames.py</code> 產生的候選影格</td><td>不能；尚未人工確認</td></tr>
+    <tr><td><code>data/processed/video_yolo</code></td><td>GUI 儲存的最終 YOLO 資料集</td><td>可以；先跑檢查</td></tr>
+  </tbody></table>
+  <p class="note"><strong>不要跳過人工確認：</strong>如果候選影格其實有煙卻被寫成空白 label，模型會學到「有煙也算背景」，這通常比少一張資料更傷害效果。</p>
+
+  <div class="step"><h2>1. 確認 Python 與環境</h2>
+    <p>在母專案根目錄（可看到 <code>scripts/</code> 與 <code>dataset_builder/</code>）開啟 Anaconda Prompt：</p>
+    <pre>conda activate YOLO11
+python --version
+python -c "import sys; print(sys.executable)"
+python -c "import cv2, numpy, yaml, PIL, torch, torchvision, ultralytics; print('imports OK')"
+python -m tkinter</pre>
+    <p>Python 版本應為 <code>3.11.15</code>。最後一行會開一個小視窗；關閉它即完成 Tkinter 測試。若環境名稱不同，替換 <code>conda activate</code> 後面的名稱即可。</p>
+    <p>子專案的依賴版本與需求一致：<code>ultralytics&gt;=8.3.0,&lt;9.0</code>、<code>opencv-python&gt;=4.9.0,!=4.13.0.90</code>、<code>numpy==1.26</code>、<code>PyYAML&gt;=6.0</code>、<code>python-dotenv&gt;=1.0</code>、<code>Pillow&gt;=10.0</code>、<code>torch==2.6.0+cpu</code>、<code>torchvision==0.21.0+cpu</code>。若母環境已安裝，不必重裝。</p>
+  </div>
+
+  <div class="step"><h2>2. 準備影片</h2>
+    <p>將影片放在不會被 Git 提交的位置，例如：</p>
+    <pre>data/raw/videos/chimney_2026-07-18_01.mp4</pre>
+    <p>檔案可以是攝影機錄影匯出的 mp4/avi/mov/mkv/ts/3gp。此子專案的輸入是「影片檔」；RTSP 串流若要製作資料，請先用母專案或錄影工具保存成影片檔，以便之後重現來源。<code>.3gp</code> 能否讀取取決於 OpenCV/FFmpeg 後端是否包含 3GPP codec。</p>
+  </div>
+
+  <div class="step"><h2>3. （可選）先抽幀查看候選資料</h2>
+    <pre>python dataset_builder/scripts/extract_frames.py \
+  --video data/raw/videos/chimney_2026-07-18_01.mp4 \
+  --output dataset_builder/data/staging \
+  --every-seconds 1</pre>
+    <p>Windows CMD 可把每行結尾的 <code>\</code> 改成一行完整命令；PowerShell 使用反引號 <code>`</code>。<code>--every-seconds 1</code> 表示每秒取一張，不代表每秒的影格都一定要存進最終資料集。</p>
+    <p>候選資料會在 <code>dataset_builder/data/staging/&lt;影片名&gt;/frames/</code>。這個步驟不是必要步驟；GUI 也可以直接讀原始影片並跳到指定影格。</p>
+  </div>
+
+  <div class="step"><h2>4. 啟動 GUI 並決定 split</h2>
+    <pre>python dataset_builder/gui/annotator_gui.py \
+  --video data/raw/videos/chimney_2026-07-18_01.mp4 \
+  --output data/processed/video_yolo \
+  --split train</pre>
+    <p>如果要使用已訓練的本機 YOLO11-seg 權重做預標註：</p>
+    <pre>python dataset_builder/gui/annotator_gui.py \
+  --video data/raw/videos/chimney_2026-07-18_01.mp4 \
+  --output data/processed/video_yolo \
+  --weights models/best.pt \
+  --split train</pre>
+    <p>權重必須是 segmentation 模型，例如母專案訓練出的 <code>best.pt</code>。離線環境下不要只寫 <code>yolo11n-seg.pt</code> 期待它自動下載；請先把權重檔放到本機。</p>
+    <h3>GUI 操作</h3>
+    <ol>
+      <li>影片整個場次開始前先選好 <code>train</code>、<code>val</code> 或 <code>test</code>。同一支影片不要中途換 split。</li>
+      <li>在畫面上依煙霧外輪廓逐點點擊；至少 3 點後按「完成多邊形」。一張畫面可畫多個煙霧區域。</li>
+      <li>有本機權重時按「載入/自動預標註」；它只提供起點，仍要人工檢查、清除或重畫。</li>
+      <li>確定有煙，保存 polygon；確定沒有煙，保持 0 個 polygon 後按「儲存此影格」，GUI 會建立空白 <code>.txt</code>。</li>
+      <li>用「上一影格」「下一影格」或輸入影格索引跳轉。按儲存後再繼續下一張。</li>
+    </ol>
+    <h3>左右翻轉資料增強</h3>
+    <p>如果這張影格已經人工確認完成，而且要把它加入訓練資料的左右翻轉版本，勾選「是否同時生成左右翻轉的副本」再按「儲存此影格」。一次儲存會產生原始檔與副本：</p>
+    <pre>images/train/chimney_01_f00000100.jpg
+labels/train/chimney_01_f00000100.txt
+images/train/chimney_01_f00000100_flip.jpg
+labels/train/chimney_01_f00000100_flip.txt</pre>
+    <p>工具會使用同一張影像的寬度，把所有 polygon 的 x 座標轉成 <code>width - 1 - x</code>，再寫出翻轉 label；你不需要重新畫遮罩。原始與翻轉影像都會出現在 <code>manifest.csv</code>。空白 polygon 的負樣本也會產生空白的翻轉 label。</p>
+    <p class="note"><strong>只對 train 使用：</strong>如果目前 split 是 <code>val</code> 或 <code>test</code>，GUI 會顯示警告並停止這次儲存；請切換回 <code>train</code>，或取消勾選後再儲存。</p>
+  </div>
+
+  <div class="step"><h2>5. 檢查資料集</h2>
+    <pre>python dataset_builder/scripts/check_dataset.py \
+  --dataset data/processed/video_yolo</pre>
+    <p>檢查項目包括：三個 split 的目錄、每張影像是否有同名 label、label 的類別 id、polygon 是否至少三個頂點、座標是否在 0 到 1，以及資料集是否至少有一張影像。成功時會重新寫出 <code>dataset.yaml</code>。</p>
+    <p>若資料夾搬到別台電腦，先重新執行：</p>
+    <pre>python dataset_builder/scripts/create_dataset_yaml.py \
+  --dataset data/processed/video_yolo</pre>
+  </div>
+
+  <div class="step"><h2>6. 直接交給母專案訓練</h2>
+    <pre>python scripts/train.py \
+  --data data/processed/video_yolo/dataset.yaml \
+  --model yolo11n-seg.pt \
+  --epochs 100 \
+  --imgsz 640 \
+  --batch 8 \
+  --device cpu \
+  --name smoke_video_yolo11</pre>
+    <p>現有的 CPU PyTorch 環境可以跑流程，但訓練可能很慢。若在有 NVIDIA GPU 的訓練電腦上執行，另建與驅動/CUDA 相容的 GPU 環境，並把 <code>--device cpu</code> 改成 <code>--device 0</code>；不要為了現場 CPU 環境任意替換 torch wheel。</p>
+    <p><code>scripts/train.py</code> 會把相對的輸出路徑固定解析到母專案根目錄，因此輸出會維持在 <code>runs/train/smoke_video_yolo11/</code>，不會因為從 <code>runs/segment</code> 等資料夾啟動而變成巢狀路徑。</p>
+    <p>若要先以測試集驗證：</p>
+    <pre>python scripts/validate.py \
+  --weights runs/train/smoke_video_yolo11/weights/best.pt \
+  --data data/processed/video_yolo/dataset.yaml \
+  --split test \
+  --device cpu</pre>
+  </div>
+
+  <div class="step"><h2>7. 將 IJmond 與影片資料集合併（可選）</h2>
+    <pre>python dataset_builder/scripts/merge_yolo.py \
+  --source data/processed/ijmond_yolo data/processed/video_yolo \
+  --output data/processed/smoke_combined_yolo</pre>
+    <p>合併工具會替檔名加上來源資料集名稱並處理重名，不會覆蓋來源資料。合併後先檢查：</p>
+    <pre>python dataset_builder/scripts/check_dataset.py \
+  --dataset data/processed/smoke_combined_yolo
+
+python scripts/train.py \
+  --data data/processed/smoke_combined_yolo/dataset.yaml \
+  --model yolo11n-seg.pt \
+  --device cpu \
+  --name smoke_combined_yolo11</pre>
+  </div>
+
+  <h2>常見問題</h2>
+  <table><thead><tr><th>現象</th><th>處理</th></tr></thead><tbody>
+    <tr><td>GUI 開不起來或顯示 cv2/PIL 缺少</td><td>確認目前 Prompt 的 Python 是 <code>conda activate YOLO11</code> 後的 Python，再執行 import 測試；不要只在另一個環境安裝套件。</td></tr>
+    <tr><td>「自動預標註」嘗試下載檔案</td><td>把本機完整路徑填入權重欄，例如 <code>C:\\...\\models\\best.pt</code>。本子專案的 GUI 不負責在隔離環境下載權重。</td></tr>
+    <tr><td>check_dataset 說缺少 label</td><td>每張 image 都必須有同名 <code>.txt</code>；回到 GUI 儲存該影格，無煙影格也要存出空白檔。</td></tr>
+    <tr><td>訓練 loss 或驗證結果很差</td><td>先檢查 polygon 是否真的圈住煙，負樣本是否人工確認，左右翻轉只放在 train，並確認同一支影片沒有同時出現在 train 與 val/test。</td></tr>
+    <tr><td>GitHub 變得很大</td><td>不要提交影片、<code>data/processed</code>、staging、<code>*.pt</code> 與 <code>runs/</code>。Git 只保存程式、文件和測試。</td></tr>
+  </tbody></table>
+
+  <h2>GitHub 提交流程</h2>
+  <pre>git status
+git add dataset_builder README.md
+git commit -m "Add video dataset builder for YOLO11 smoke segmentation"
+git push</pre>
+  <p class="note ok">建議在提交前執行 <code>python -m compileall dataset_builder/src dataset_builder/scripts dataset_builder/gui</code>，並在已安裝完整依賴的環境執行測試。原始影片與模型權重透過另外的受控儲存管理。</p>
+</article></main></body>
+</html>

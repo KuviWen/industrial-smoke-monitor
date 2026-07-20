@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Splitter｜操作說明書</title>
+  <style>
+    :root { --ink:#17202a; --muted:#5d6873; --blue:#1769aa; --line:#d8e0e7; --paper:#fff; --wash:#f4f7fa; --warn:#9a5b00; --green:#16794a; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:var(--wash); font:16px/1.75 "Segoe UI", "Noto Sans TC", sans-serif; }
+    main { max-width:1100px; margin:0 auto; padding:42px 22px 72px; } article { background:var(--paper); padding:34px clamp(22px,5vw,64px); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 32px #26384a12; }
+    h1,h2,h3 { line-height:1.3; } h1 { margin-top:0; font-size:2.2rem; } h2 { margin-top:2.2rem; border-bottom:2px solid var(--line); padding-bottom:.35rem; } h3 { margin-top:1.5rem; } .lead { color:var(--muted); font-size:1.08rem; }
+    code,pre { font-family:Consolas,"Noto Sans Mono",monospace; } code { background:#edf2f6; padding:.08rem .3rem; border-radius:4px; } pre { background:#14212b; color:#e9f1f7; padding:17px; overflow:auto; border-radius:10px; line-height:1.55; }
+    .step { border-left:4px solid var(--blue); padding:3px 0 3px 18px; margin:22px 0; } .note { border-left:4px solid var(--warn); background:#fff7e8; padding:12px 15px; } .ok { border-left-color:var(--green); background:#effaf4; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; } th,td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; } th { background:#edf3f7; } li { margin:4px 0; }
+    @media (max-width:760px) { article { padding:24px 18px; } }
+  </style>
+</head>
+<body><main><article>
+  <h1>Industrial Video Splitter 操作說明書</h1>
+  <p class="lead">本工具以 GUI 切割本機影片檔，適合先把長時間的煙囪錄影切成小片段，再交給母專案的 <code>dataset_builder/</code> 進行抽幀與 YOLO11 標註。</p>
+
+  <p class="note"><strong>先說清楚：</strong>這個版本用 OpenCV 重新編碼影像，輸出檔通常不含音訊。它的設計目標是影像資料製作，不是影音剪輯或音訊保存。</p>
+
+  <div class="step"><h2>1. 確認環境</h2>
+    <p>從母專案根目錄開啟 Anaconda Prompt：</p>
+    <pre>cd C:\industrial-smoke-monitor
+conda activate YOLO11
+python --version
+python -c "import cv2, numpy, PIL; print('video dependencies OK')"
+python -m tkinter</pre>
+    <p>Python 版本應為 <code>3.11.15</code>。Tkinter 是標準 Python 的 GUI 元件，本子專案不新增 Streamlit、Qt 或其他視窗套件。</p>
+    <p>若母環境尚未有本子專案需要的套件，可在可連網環境使用：</p>
+    <pre>python -m pip install -r video_splitter/requirements.txt</pre>
+    <p>隔離電腦請沿用既有離線安裝流程，不要在現場假設可以下載套件。</p>
+  </div>
+
+  <div class="step"><h2>2. 啟動 GUI</h2>
+    <pre>python video_splitter/gui/video_splitter_gui.py `
+  --output video_splitter/data/output</pre>
+    <p>也可以直接帶入影片：</p>
+    <pre>python video_splitter/gui/video_splitter_gui.py `
+  --video data/raw/videos/chimney_2026-07-18_01.mp4 `
+  --output video_splitter/data/output</pre>
+    <p>如果使用 Windows CMD，請把 PowerShell 的反引號 <code>`</code> 改成單行命令，或移除換行。</p>
+  </div>
+
+  <div class="step"><h2>3. 開啟與預覽影片</h2>
+    <ol>
+      <li>按「選擇影片」挑選 <code>.mp4</code>、<code>.avi</code>、<code>.mov</code>、<code>.mkv</code>、<code>.ts</code> 或 <code>.3gp</code>。</li>
+      <li>按「開啟」。上方資訊列會顯示寬度、高度、FPS、影格數與影片長度。</li>
+      <li>拖曳時間軸預覽；也可用「上一影格」「下一影格」，或輸入影格索引後按「跳到」。</li>
+      <li>預覽影格的時間是用 <code>frame_index / FPS</code> 計算，輸入框接受秒數、<code>MM:SS</code> 或 <code>HH:MM:SS.mmm</code>。</li>
+    </ol>
+  </div>
+
+  <div class="step"><h2>4. 單段切割：輸出一個片段</h2>
+    <ol>
+      <li>在「切割範圍」填寫開始與結束時間，例如 <code>00:12:30.000</code> 到 <code>00:13:10.000</code>。</li>
+      <li>或在預覽到目標影格後，按「用目前影格設定開始」與「用目前影格設定結束」。</li>
+      <li>選擇「單段：輸出一個起訖範圍」。</li>
+      <li>設定輸出資料夾與檔名前綴，例如 <code>camera_01_event</code>。</li>
+      <li>按「開始切割」。輸出會類似：</li>
+    </ol>
+    <pre>video_splitter/data/output/camera_01_event_0001.mp4</pre>
+  </div>
+
+  <div class="step"><h2>5. 批次切割：長影片切成多段</h2>
+    <ol>
+      <li>設定整體開始與結束時間；預設是整支影片。</li>
+      <li>選擇「批次：依固定長度切成多段」。</li>
+      <li>填寫「每段秒數」，例如 <code>60</code>。</li>
+      <li>填寫「段與段起點間隔秒數」。設為 <code>60</code> 代表不重疊；設為 <code>30</code> 代表每 30 秒開始一段、每段 60 秒，會有 30 秒重疊。</li>
+      <li>按「開始切割」。最後不足完整長度的尾段仍會輸出，只要至少有一個影格。</li>
+    </ol>
+    <p>例如 0 到 125 秒、每段 60 秒、間隔 60 秒，會產生 0–60、60–120、120–125 三段。</p>
+  </div>
+
+  <div class="step"><h2>6. 檔案管理與取消</h2>
+    <ul>
+      <li>未勾選「允許覆寫同名檔案」時，工具會自動加上 <code>_001</code>、<code>_002</code>，避免蓋掉已有片段。</li>
+      <li>勾選覆寫前，請確認輸出資料夾就是此次工作的目標資料夾。</li>
+      <li>切割在背景執行，進度列會更新；按「取消」會在目前影格寫入後停止，已完成的片段會保留。</li>
+      <li>輸出影片是影像重新編碼結果，不保留原始音訊。若影片有不同的旋轉 metadata，也應以輸出畫面實際方向為準。</li>
+    </ul>
+  </div>
+
+  <div class="step"><h2>7. 接到 YOLO11 資料製作流程</h2>
+    <p>切割完成後，把片段交給上一個子專案：</p>
+    <pre>python dataset_builder/scripts/extract_frames.py `
+  --video video_splitter/data/output/camera_01_event_0001.mp4 `
+  --output dataset_builder/data/staging `
+  --every-seconds 1
+
+python dataset_builder/gui/annotator_gui.py `
+  --video video_splitter/data/output/camera_01_event_0001.mp4 `
+  --output data/processed/video_yolo `
+  --split train</pre>
+    <p>同一場次的切割片段不要分散到 train、val、test。為避免資料洩漏，應先按日期、攝影機或場次決定 split，再把同一來源場次的片段放在同一個 split。</p>
+  </div>
+
+  <h2>常見問題</h2>
+  <table><thead><tr><th>現象</th><th>處理方式</th></tr></thead><tbody>
+    <tr><td>影片無法開啟，尤其是 .3gp</td><td>確認目前 Prompt 是正確的 Anaconda 環境，先用 <code>import cv2</code> 測試；再確認檔案可由一般播放器播放。<code>.3gp</code> 是否能解碼取決於 OpenCV/FFmpeg 後端是否包含 3GPP codec。</td></tr>
+    <tr><td>輸出資料夾沒有檔案</td><td>確認結束時間大於開始時間、輸出資料夾可寫入，且影片編碼器可建立 <code>mp4v</code>。</td></tr>
+    <tr><td>輸出影片沒有聲音</td><td>這是本工具的預期行為；影像資料製作不受影響。需要音訊時請用另外的 FFmpeg 影音流程。</td></tr>
+    <tr><td>切割速度較慢</td><td>此工具會重新編碼，速度取決於 CPU、影片解析度與片段數；批次重疊越多，重讀影格的工作量越大。</td></tr>
+    <tr><td>GitHub repository 變大</td><td>不要提交原始影片或輸出影片；<code>video_splitter/.gitignore</code> 已排除常見影片副檔名與 <code>data/output</code>。</td></tr>
+  </tbody></table>
+
+  <h2>Git 提交流程</h2>
+  <pre>git status
+git add video_splitter README.md
+git commit -m "Add Tkinter video splitter subproject"
+git push</pre>
+  <p class="note ok">提交前可執行 <code>python -m compileall video_splitter/src video_splitter/gui video_splitter/tests</code>，並在已安裝完整依賴的 Windows 環境執行 pytest。</p>
+</article></main></body>
+</html>

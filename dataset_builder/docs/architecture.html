@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dataset Builder｜專案架構</title>
+  <style>
+    :root { --ink:#17202a; --muted:#5d6873; --blue:#1769aa; --line:#d8e0e7; --paper:#fff; --wash:#f4f7fa; --green:#16794a; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:var(--wash); font:16px/1.75 "Segoe UI", "Noto Sans TC", sans-serif; }
+    main { max-width:1080px; margin:0 auto; padding:42px 22px 72px; } article { background:var(--paper); padding:34px clamp(22px, 5vw, 64px); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 32px #26384a12; }
+    h1,h2,h3 { line-height:1.3; } h1 { margin-top:0; font-size:2.2rem; } h2 { margin-top:2.2rem; border-bottom:2px solid var(--line); padding-bottom:.35rem; } h3 { margin-top:1.5rem; }
+    .lead { color:var(--muted); font-size:1.08rem; } code, pre { font-family:Consolas, "Noto Sans Mono", monospace; } code { background:#edf2f6; padding:.08rem .3rem; border-radius:4px; }
+    pre { background:#14212b; color:#e9f1f7; padding:17px; overflow:auto; border-radius:10px; line-height:1.55; } .flow { display:grid; grid-template-columns:repeat(7, 1fr); gap:10px; margin:18px 0; } .node { border:1px solid #b9cad8; background:#fafdff; border-radius:10px; padding:15px; text-align:center; grid-column:span 1; } .arrow { display:flex; align-items:center; justify-content:center; color:var(--blue); font-size:1.4rem; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; } th,td { border:1px solid var(--line); padding:9px 11px; vertical-align:top; text-align:left; } th { background:#edf3f7; } .note { border-left:4px solid var(--blue); background:#eef7ff; padding:12px 15px; } .ok { border-left-color:var(--green); background:#effaf4; }
+    @media (max-width:760px) { .flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); } article { padding:24px 18px; } }
+  </style>
+</head>
+<body><main><article>
+  <h1>Industrial Smoke Dataset Builder</h1>
+  <p class="lead">這個子專案負責把「影片」製作成母專案可以直接訓練 YOLO11 instance segmentation 的資料。它把抽幀、人工確認、可選的模型預標註、資料檢查與資料集合併分開，方便在隔離外網的 Windows 電腦上重複使用。</p>
+
+  <h2>一、整體資料流</h2>
+  <div class="flow">
+    <div class="node"><strong>1. 影片</strong><br>mp4 / avi / mov / 3gp<br>攝影機錄影或匯出檔</div><div class="arrow">→</div>
+    <div class="node"><strong>2. 取樣</strong><br>OpenCV 依秒數抽幀<br>暫存到 staging</div><div class="arrow">→</div>
+    <div class="node"><strong>3. 標註與確認</strong><br>Tkinter 點選 polygon<br>可用 YOLO11-seg 預標註</div><div class="arrow">→</div>
+    <div class="node"><strong>4. YOLO 資料集</strong><br>images / labels / YAML<br>直接給母專案訓練</div>
+  </div>
+  <p class="note"><strong>重要：</strong>抽出的影格只是候選資料，不會自動被當成「無煙」。只有在 GUI 中確認後按下儲存，才會寫入最終資料集；沒有 polygon 的人工確認影格才會產生空白 label。</p>
+
+  <h2>左右翻轉資料增強</h2>
+  <p>在 GUI 勾選「是否同時生成左右翻轉的副本」後，每次儲存一張已人工確認的影格，writer 會把原始影像與 polygon 一起複製成另一個訓練樣本。這不是只翻轉圖片：label 中的每個 polygon 也會同步鏡射。</p>
+  <pre>原始 image + polygons
+        │
+        ├── 原始 image.jpg + image.txt
+        │
+        └── cv2.flip(image, 1)
+            x' = width - 1 - x
+            → image_flip.jpg + image_flip.txt</pre>
+  <p>影像座標的有效 x 範圍是 <code>0 ... width-1</code>，所以水平翻轉使用 <code>x' = width - 1 - x</code>，y 座標維持不變。翻轉副本與原始樣本會放在相同的 split，並各自留下 <code>manifest.csv</code> 紀錄；副本的狀態為 <code>reviewed_augmented_horizontal_flip</code>。</p>
+  <p class="note ok"><strong>資料評估原則：</strong>這個選項只建議用於 <code>train</code>。GUI 對 <code>val</code> / <code>test</code> 會阻止儲存，避免驗證與測試資料被資料增強，造成評估結果偏樂觀。</p>
+
+  <h2>二、子專案目錄</h2>
+  <pre>dataset_builder/
+├── README.md
+├── .python-version                 # 3.11.15
+├── requirements.txt                # 與母環境相容的套件版本
+├── pyproject.toml
+├── docs/
+│   ├── architecture.html           # 本文件
+│   └── operations.html             # 操作手冊
+├── src/smoke_dataset_builder/
+│   ├── dataset.py                  # 寫入 YOLO、可選翻轉副本與 manifest
+│   ├── video.py                    # 影片資訊與規律抽幀
+│   └── yolo.py                     # polygon、翻轉座標、mask、label 驗證
+├── scripts/
+│   ├── extract_frames.py           # 影片 → staging 候選影格
+│   ├── check_dataset.py            # image/label 配對與格式檢查
+│   ├── create_dataset_yaml.py      # 重新建立 dataset.yaml
+│   └── merge_yolo.py               # 多個 YOLO 資料集合併
+├── gui/annotator_gui.py            # Tkinter 人工標註與可選預標註
+└── tests/                          # 不依賴現場影片的單元測試</pre>
+
+  <h2>三、最後輸出與母專案的對接</h2>
+  <pre>data/processed/video_yolo/
+├── dataset.yaml
+├── manifest.csv
+├── images/{train,val,test}/*.jpg
+└── labels/{train,val,test}/*.txt</pre>
+  <p><code>dataset.yaml</code> 會用輸出資料夾的絕對路徑，避免 Windows 從不同工作目錄啟動時找不到影像。若整個資料夾搬到另一台電腦，執行 <code>create_dataset_yaml.py</code> 重新生成即可。</p>
+  <p>若啟用翻轉增強，同一筆人工標註會在相同 split 多出一組以 <code>_flip</code> 結尾的 image/label；資料夾的配對規則不變，母專案不需要額外設定。</p>
+  <table><thead><tr><th>檔案</th><th>用途</th><th>母專案使用方式</th></tr></thead><tbody>
+    <tr><td><code>images/train</code> 等</td><td>實際影像</td><td>Ultralytics 讀取</td></tr>
+    <tr><td><code>labels/train</code> 等</td><td>每個影像同名的 segmentation label</td><td>一個 polygon 一行；類別 0 是 smoke</td></tr>
+    <tr><td><code>dataset.yaml</code></td><td>資料根目錄、split 與類別名稱</td><td><code>python scripts/train.py --data data/processed/video_yolo/dataset.yaml</code></td></tr>
+    <tr><td><code>manifest.csv</code></td><td>影片來源、frame index、時間、label 數量</td><td>稽核與日後追查，不是 YOLO 必需檔</td></tr>
+  </tbody></table>
+
+  <h2>四、YOLO11-seg label 長什麼樣子？</h2>
+  <pre>0 0.215000 0.180000 0.280000 0.165000 0.340000 0.240000
+0 0.620000 0.330000 0.700000 0.290000 0.760000 0.390000</pre>
+  <p>第一個數字是類別 id；後面是依序排列的 polygon 頂點，x、y 都已除以影像寬、高，範圍通常為 0 到 1。若一張影像經人工確認沒有煙，label 檔保留為空白檔案。</p>
+
+  <h2>五、為什麼 split 要以影片/場次為單位？</h2>
+  <p>同一支影片相鄰影格非常相似。若把同一支影片隨機切到 train 與 val，驗證分數可能看似很高，但其實模型只是看過幾乎相同的畫面，這叫資料洩漏。GUI 的 split 要在處理整支影片前決定，建議一支影片只進一個 split，例如：</p>
+  <table><thead><tr><th>來源</th><th>用途</th></tr></thead><tbody>
+    <tr><td>不同日期、攝影機或場次</td><td>分散到 train / val / test，讓測試更接近真正換場景</td></tr>
+    <tr><td>同一支影片的全部影格</td><td>只能選一個 split</td></tr>
+    <tr><td>每個 split 沒有樣本</td><td>先補資料；不要拿同一段影片複製到另一個 split</td></tr>
+  </tbody></table>
+
+  <h2>六、套件與離線設計</h2>
+  <p>GUI 使用 Python 內建 Tkinter，不強制加入 Streamlit、Qt 或其他 GUI 套件。影像讀寫由 OpenCV 處理，預覽由 Pillow 顯示，YOLO11 自動預標註則在使用者提供本機 <code>.pt</code> 權重後才載入。這樣在隔離外網環境中，手動標註仍可運作，而且不會因為嘗試下載權重而卡住。</p>
+  <p class="note ok"><strong>和母專案的關係：</strong>這是母專案的資料製作工具，不會修改 RTSP、告警或 Email 程式。產生的 <code>data/processed/video_yolo/dataset.yaml</code> 可直接作為母專案訓練輸入。</p>
+</article></main></body>
+</html>

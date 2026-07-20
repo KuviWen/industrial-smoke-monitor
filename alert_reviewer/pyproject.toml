@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "industrial-smoke-alert-reviewer"
+version = "0.1.0"
+description = "GUI to inspect, relabel, export, retain, or delete smoke monitor alerts"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "opencv-python>=4.9.0,!=4.13.0.90",
+    "numpy==1.26",
+    "PyYAML>=6.0",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

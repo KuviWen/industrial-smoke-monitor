@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "industrial-smoke-monitor"
+version = "0.1.0"
+description = "YOLO11 industrial chimney smoke monitoring with RTSP and email alerts"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "ultralytics>=8.3.0,<9.0",
+    "opencv-python>=4.9.0,!=4.13.0.90",
+    "numpy==1.26",
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+    "Pillow>=10.0",
+    # Keep these active entries aligned with requirements.txt.  Switch both
+    # files to the CPU alternatives for a CPU-only installation.
+    "torch==2.6.0+cu124",
+    "torchvision==0.21.0+cu124",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
