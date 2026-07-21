@@ -25,10 +25,20 @@ def test_live_stream_serves_annotated_frame_and_scores():
         assert latest["classification"] == "smoke"
         assert latest["conf"] == 0.91
 
+        with urlopen(server.url + "frame.jpg?after=0", timeout=3) as response:
+            assert response.headers["Content-Type"] == "image/jpeg"
+            assert response.headers["X-Stream-Sequence"] == "1"
+            assert response.read(2) == b"\xff\xd8"
+
         with urlopen(server.url, timeout=3) as response:
+            assert response.headers["X-UA-Compatible"] == "IE=edge"
             page = response.read().decode("utf-8")
         assert "<video" in page
+        assert 'http-equiv="X-UA-Compatible"' in page
         assert 'fetch("/stream"' in page
+        assert "/frame.jpg?after=" in page
+        assert "async function" not in page
+        assert "=>" not in page
         assert '<img src="/stream' not in page
 
         with urlopen(server.url + "stream", timeout=3) as response:
