@@ -66,7 +66,7 @@ python scripts/test_email.py --settings configs/monitor_settings.env
 python scripts/run_monitor.py --settings configs/monitor_settings.env
 ```
 
-若要先觀察模型而不寄信，設定 `SHADOW_MODE=true`；若要以瀏覽器的 HTML5 `<video>` 元件觀看即時標註影片，設定 `ALLOW_LIVE_STREAMING=true`，然後開啟 `http://127.0.0.1:8765/`。煙霧告警預設會保存到 `data/runtime/alerts/`，包含 JPG 與同名 JSON，供 [報警資料檢查／重標註 GUI](alert_reviewer/docs/operations.html) 人工確認。`detections.jsonl` 預設只記錄煙霧偵測與告警／解除事件，不會逐張記錄無煙影格；如需定期無煙摘要，可設定 `NO_SMOKE_LOG_INTERVAL_SECONDS`。
+若要先觀察模型而不寄信，設定 `SHADOW_MODE=true`；若要以瀏覽器觀看即時標註影片，設定 `ALLOW_LIVE_STREAMING=true`，然後用 Chrome／Edge 正常模式開啟 `http://127.0.0.1:8765/`。現代瀏覽器會使用 HTML5 `<video>`；IE 或 IE 相容模式會自動改用 canvas 相容預覽，若仍無法顯示，請改用最新版 Edge 的非 IE 模式。煙霧告警預設會保存到 `data/runtime/alerts/`，包含 JPG 與同名 JSON，供 [報警資料檢查／重標註 GUI](alert_reviewer/docs/operations.html) 人工確認；每次煙霧偵測也會以 `INFO` 即時輸出到 CLI 與 `data/runtime/logs/monitor.log`。`detections.jsonl` 預設只記錄煙霧偵測與告警／解除事件，不會逐張記錄無煙影格；如需定期無煙摘要，可設定 `NO_SMOKE_LOG_INTERVAL_SECONDS`。
 
 正式設定檔固定使用 `configs/monitor_settings.env`；專案不再讀取或建立根目錄的隱藏設定檔。現場 Windows 電腦需要安裝 Python 3.11.15 與相依套件；隔離環境請依離線安裝指南準備 Windows wheel／Conda 套件，再以 `deploy/install_windows.ps1` 安裝。
 

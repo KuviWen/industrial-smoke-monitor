@@ -5,6 +5,10 @@ latest encoded frame in memory; it does not write a live JPG or JSON file.
 The browser page consumes the frame stream, creates a MediaStream from a
 canvas, and displays that MediaStream in a real ``<video>`` element.  This is
 more compatible than asking browsers to play MJPEG directly as a video URL.
+Older Internet Explorer and compatibility-mode browsers cannot parse the
+modern JavaScript APIs used by that path and cannot play multipart JPEG as a
+native ``<video>`` source.  They use an ES5 XMLHttpRequest/canvas fallback
+through the in-memory ``/frame.jpg`` endpoint instead.
 The default bind address is localhost.  Set ``LIVE_STREAM_HOST=0.0.0.0`` only
 when the site network and firewall rules explicitly allow other clients.
 """
@@ -16,7 +20,7 @@ import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import cv2
 import numpy as np
@@ -137,11 +141,14 @@ class _LiveRequestHandler(BaseHTTPRequestHandler):
         return self.server.live_stream  # type: ignore[attr-defined]
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path in {"", "/"}:
             self._send_html()
         elif path == "/stream":
             self._send_stream()
+        elif path == "/frame.jpg":
+            self._send_frame(parsed.query)
         elif path == "/latest.json":
             self._send_latest_json()
         elif path == "/healthz":
@@ -151,7 +158,8 @@ class _LiveRequestHandler(BaseHTTPRequestHandler):
 
     def _send_html(self) -> None:
         body = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en"><head><meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Industrial Smoke Monitor</title>
 <style>body{{margin:0;background:#111;color:#eee;font:16px system-ui,sans-serif}}
@@ -165,94 +173,175 @@ a{{color:#8bd5ff}} .status{{color:#b9c6d3}}</style></head>
 <p id="status" class="status">Connecting to live video...</p>
 <p><a href="/latest.json">Latest scores (JSON)</a> · <a href="/healthz">Health</a></p>
 <script>
-(() => {{
-  const video = document.getElementById("live-video");
-  const canvas = document.getElementById("frame-canvas");
-  const context = canvas.getContext("2d");
-  const status = document.getElementById("status");
-  let canvasStream = null;
-  let stopped = false;
+(function () {{
+  var video = document.getElementById("live-video");
+  var canvas = document.getElementById("frame-canvas");
+  var context = canvas.getContext("2d");
+  var status = document.getElementById("status");
+  var canvasStream = null;
+  var stopped = false;
+  var sequence = 0;
 
-  const sleep = (milliseconds) => new Promise((resolve) =>
-    window.setTimeout(resolve, milliseconds));
+  function setStatus(message) {{
+    status.innerHTML = message;
+  }}
 
   function appendBytes(left, right) {{
-    const joined = new Uint8Array(left.length + right.length);
+    var joined = new Uint8Array(left.length + right.length);
     joined.set(left);
     joined.set(right, left.length);
     return joined;
   }}
 
   function findMarker(bytes, first, second, start) {{
-    for (let index = start; index + 1 < bytes.length; index += 1) {{
+    var index;
+    for (index = start; index + 1 < bytes.length; index += 1) {{
       if (bytes[index] === first && bytes[index + 1] === second) return index;
     }}
     return -1;
   }}
 
-  async function consumeFrameStream() {{
-    const response = await fetch("/stream", {{cache: "no-store"}});
-    if (!response.ok || !response.body) throw new Error("stream request failed");
-    const reader = response.body.getReader();
-    let buffer = new Uint8Array(0);
-
-    while (!stopped) {{
-      const {{value, done}} = await reader.read();
-      if (done) return;
-      if (value) buffer = appendBytes(buffer, value);
-
-      while (true) {{
-        const start = findMarker(buffer, 0xff, 0xd8, 0);
-        if (start < 0) {{
-          if (buffer.length > 1024 * 1024) buffer = buffer.slice(-2);
-          break;
-        }}
-        const end = findMarker(buffer, 0xff, 0xd9, start + 2);
-        if (end < 0) {{
-          if (start > 0) buffer = buffer.slice(start);
-          break;
-        }}
-
-        const jpeg = buffer.slice(start, end + 2);
-        buffer = buffer.slice(end + 2);
-        const bitmap = await createImageBitmap(
-          new Blob([jpeg], {{type: "image/jpeg"}})
-        );
-
-        if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {{
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-        }}
-        if (!canvasStream) {{
-          if (!canvas.captureStream) {{
-            throw new Error("this browser has no canvas video support");
-          }}
-          canvasStream = canvas.captureStream(10);
-          video.srcObject = canvasStream;
-          await video.play().catch(() => {{}});
-        }}
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        bitmap.close();
-        status.textContent = "Live video connected";
+  function drawBitmap(bitmap) {{
+    if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {{
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+    }}
+    if (!canvasStream) {{
+      canvasStream = canvas.captureStream(10);
+      video.srcObject = canvasStream;
+      if (video.play) {{
+        video.play().then(function () {{}}, function () {{}});
       }}
     }}
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    if (bitmap.close) bitmap.close();
+    setStatus("Live video connected");
   }}
 
-  async function start() {{
-    if (!HTMLCanvasElement.prototype.captureStream) {{
-      status.textContent = "This browser cannot display the live video preview.";
+  function consumeModernStream() {{
+    return window.fetch("/stream", {{cache: "no-store"}}).then(function (response) {{
+      if (!response.ok || !response.body) throw new Error("stream request failed");
+      var reader = response.body.getReader();
+      var buffer = new Uint8Array(0);
+
+      function processFrames() {{
+        var start = findMarker(buffer, 0xff, 0xd8, 0);
+        var end;
+        var jpeg;
+        if (start < 0) {{
+          if (buffer.length > 1024 * 1024) buffer = buffer.slice(-2);
+          return window.Promise.resolve();
+        }}
+        end = findMarker(buffer, 0xff, 0xd9, start + 2);
+        if (end < 0) {{
+          if (start > 0) buffer = buffer.slice(start);
+          return window.Promise.resolve();
+        }}
+        jpeg = buffer.slice(start, end + 2);
+        buffer = buffer.slice(end + 2);
+        return window.createImageBitmap(
+          new Blob([jpeg], {{type: "image/jpeg"}})
+        ).then(function (bitmap) {{
+          drawBitmap(bitmap);
+          return processFrames();
+        }});
+      }}
+
+      function readNext() {{
+        if (stopped) return window.Promise.resolve();
+        return reader.read().then(function (result) {{
+          if (result.done) return null;
+          if (result.value) buffer = appendBytes(buffer, result.value);
+          return processFrames().then(readNext);
+        }});
+      }}
+
+      return readNext();
+    }});
+  }}
+
+  function startModernStream() {{
+    consumeModernStream().then(function () {{
+      if (!stopped) {{
+        setStatus("Live video reconnecting...");
+        window.setTimeout(startModernStream, 1000);
+      }}
+    }}, function (error) {{
+      if (!stopped) {{
+        setStatus("Live video unavailable; retrying...");
+        if (window.console && console.error) console.error(error);
+        window.setTimeout(startModernStream, 1000);
+      }}
+    }});
+  }}
+
+  function drawLegacyFrame(blob) {{
+    var image = new Image();
+    var objectUrlApi = window.URL || window.webkitURL;
+    var objectUrl;
+    if (!objectUrlApi || !objectUrlApi.createObjectURL) {{
+      setStatus("This browser cannot display the live video preview.");
       return;
     }}
-    while (!stopped) {{
-      try {{
-        await consumeFrameStream();
-        status.textContent = "Live video reconnecting...";
-      }} catch (error) {{
-        status.textContent = "Live video unavailable; retrying...";
-        console.error(error);
+    objectUrl = objectUrlApi.createObjectURL(blob);
+    image.onload = function () {{
+      if (canvas.width !== image.width || canvas.height !== image.height) {{
+        canvas.width = image.width;
+        canvas.height = image.height;
       }}
-      await sleep(1000);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      objectUrlApi.revokeObjectURL(objectUrl);
+      setStatus("Live preview connected (compatibility mode)");
+      requestLegacyFrame();
+    }};
+    image.onerror = function () {{
+      objectUrlApi.revokeObjectURL(objectUrl);
+      setStatus("Live preview frame could not be decoded; retrying...");
+      window.setTimeout(requestLegacyFrame, 1000);
+    }};
+    image.src = objectUrl;
+  }}
+
+  function requestLegacyFrame() {{
+    var request;
+    if (stopped) return;
+    request = new XMLHttpRequest();
+    request.open("GET", "/frame.jpg?after=" + sequence + "&cache=" + new Date().getTime(), true);
+    try {{ request.responseType = "blob"; }} catch (ignore) {{}}
+    request.onreadystatechange = function () {{
+      var nextSequence;
+      if (request.readyState !== 4) return;
+      if (request.status === 200) {{
+        nextSequence = parseInt(request.getResponseHeader("X-Stream-Sequence"), 10);
+        if (!isNaN(nextSequence)) sequence = nextSequence;
+        drawLegacyFrame(request.response);
+      }} else {{
+        setStatus("Live preview unavailable; retrying...");
+        window.setTimeout(requestLegacyFrame, 1000);
+      }}
+    }};
+    request.onerror = function () {{
+      setStatus("Live preview unavailable; retrying...");
+      window.setTimeout(requestLegacyFrame, 1000);
+    }};
+    request.send(null);
+  }}
+
+  function start() {{
+    var modernVideo = window.fetch && window.Promise && window.ReadableStream &&
+      window.createImageBitmap && typeof canvas.captureStream === "function";
+    if (modernVideo) {{
+      startModernStream();
+      return;
     }}
+    video.style.display = "none";
+    canvas.hidden = false;
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.maxHeight = "80vh";
+    canvas.style.backgroundColor = "#000";
+    setStatus("Using compatibility live preview...");
+    requestLegacyFrame();
   }}
 
   start();
@@ -262,6 +351,7 @@ a{{color:#8bd5ff}} .status{{color:#b9c6d3}}</style></head>
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-UA-Compatible", "IE=edge")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
@@ -293,6 +383,28 @@ a{{color:#8bd5ff}} .status{{color:#b9c6d3}}</style></head>
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             logger.debug("Live stream client disconnected")
+
+    def _send_frame(self, query: str) -> None:
+        """Long-poll one in-memory JPEG for legacy browser compatibility."""
+
+        try:
+            after = int(parse_qs(query).get("after", ["0"])[0])
+        except (TypeError, ValueError):
+            after = 0
+        frame, _record, sequence = self.live_stream.wait_for_frame(
+            after, timeout=10.0
+        )
+        if frame is None:
+            self.send_error(503, "No frame available")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(frame)))
+        self.send_header("X-Stream-Sequence", str(sequence))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.end_headers()
+        self.wfile.write(frame)
 
     def _send_latest_json(self) -> None:
         _frame, record, sequence = self.live_stream.snapshot()

@@ -133,6 +133,12 @@ def run_monitor(settings: Settings) -> None:
             else:
                 record["record_reason"] = "no_smoke_not_persisted"
 
+            alert_snapshot_status = "not_applicable"
+            if detection.smoke:
+                alert_snapshot_status = (
+                    "disabled" if not settings.save_alert_snapshots else "throttled"
+                )
+
             if (
                 settings.save_alert_snapshots
                 and detection.smoke
@@ -148,8 +154,10 @@ def run_monitor(settings: Settings) -> None:
                     record["alert_image_path"] = str(alert_image_path)
                     record["alert_metadata_path"] = str(alert_metadata_path)
                     last_alert_snapshot = now_monotonic
+                    alert_snapshot_status = "saved"
                 except Exception:
                     logger.exception("Unable to save smoke alert artifact")
+                    alert_snapshot_status = "failed"
 
             if live_stream is not None:
                 record["live_stream_url"] = live_stream.url
@@ -203,8 +211,27 @@ def run_monitor(settings: Settings) -> None:
             # Detailed records are useful for smoke frames and state-machine
             # events.  By default, a negative inference is not persisted;
             # optionally retain one compact summary at a configured interval.
+            record_written = False
             if detection.smoke or events or should_record_no_smoke:
                 store.append_record(record)
+                record_written = True
+
+            if detection.smoke:
+                logger.info(
+                    "Smoke detected: site=%s camera=%s conf=%.4f area=%.6f "
+                    "instances=%d alarm=%s snapshot=%s image=%s metadata=%s "
+                    "jsonl=%s",
+                    settings.site_name,
+                    settings.camera_name,
+                    detection.max_confidence,
+                    detection.smoke_area_ratio,
+                    detection.instance_count,
+                    alarm.state,
+                    alert_snapshot_status,
+                    record.get("alert_image_path", "-"),
+                    record.get("alert_metadata_path", "-"),
+                    store.records_path if record_written else "not_written",
+                )
 
     finally:
         source.close()

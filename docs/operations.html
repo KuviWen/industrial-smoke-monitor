@@ -249,9 +249,10 @@ data/runtime/alerts/YYYY-MM-DD/*_smoke.jpg
 data/runtime/alerts/YYYY-MM-DD/*_smoke.json
 http://127.0.0.1:8765/             # ALLOW_LIVE_STREAMING=true 時</pre>
       <p>JSONL 紀錄包含時間、分類、conf、area、ROI、box、mask polygon、alarm state、事件與 Email 成功／失敗狀態。為避免無煙時每一張影格都造成檔案膨脹，預設只保存 smoke 偵測與告警／解除事件；若需要稽核無煙狀態，可將 <code>NO_SMOKE_LOG_INTERVAL_SECONDS</code> 設為大於 0 的秒數，按間隔保存一筆 <code>no_smoke_summary</code>。告警 JSON sidecar 也保留相同資訊，供 <a href="../alert_reviewer/docs/operations.html">報警資料檢查／重標註 GUI</a> 使用。舊設定名 <code>SAVE_POSITIVE_SNAPSHOTS</code> 仍可相容讀取，但新設定請使用 <code>SAVE_ALERT_SNAPSHOTS</code>。</p>
+      <p class="copy"><strong>煙霧即時輸出：</strong>每次抽樣結果判定為 <code>smoke</code> 且 JSONL 寫入完成後，會以 <code>INFO</code> 推送一行到 CLI 與 <code>data/runtime/logs/monitor.log</code>，包含 <code>conf</code>、<code>area</code>、<code>instance</code>、alarm state、快照狀態、圖片路徑、JSON 路徑與 JSONL 路徑。要看到這些訊息，<code>LOG_LEVEL</code> 必須是 <code>INFO</code> 或 <code>DEBUG</code>；預設值為 <code>INFO</code>。</p>
       <p class="copy"><strong>Shadow mode：</strong>將 <code>SHADOW_MODE=true</code> 後，程式會照常保存煙霧與告警事件、更新狀態機並在 JSONL 標記 <code>suppressed_shadow_mode</code>，但不會呼叫 SMTP。確認現場結果後再改回 <code>false</code>。</p>
       <p class="copy"><strong>既有檔案：</strong>新設定只影響之後的寫入，不會自動縮小既有的 <code>data/runtime/detections.jsonl</code>。若舊檔案已過大，請先停止 monitor，再將它移到已備份的日期資料夾或改名封存，程序會建立新的 JSONL 檔。</p>
-      <p class="copy"><strong>Live video：</strong>設定 <code>ALLOW_LIVE_STREAMING=true</code> 後，用 Chrome 或 Edge 開啟 <code>http://127.0.0.1:8765/</code>；頁面會以 HTML5 <code>&lt;video&gt;</code> 元件顯示影片，不使用 <code>&lt;img&gt;</code> 播放。若使用 <code>LIVE_STREAM_HOST=0.0.0.0</code>，請以現場電腦實際 IP 取代網址中的 <code>127.0.0.1</code>，並限制防火牆來源。影格只保留在記憶體，不會產生逐影格 JPG 檔案。</p>
+      <p class="copy"><strong>Live video：</strong>設定 <code>ALLOW_LIVE_STREAMING=true</code> 後，用最新版 Chrome 或 Edge 的正常模式開啟 <code>http://127.0.0.1:8765/</code>；現代瀏覽器會以 HTML5 <code>&lt;video&gt;</code> 元件顯示影片，不使用 <code>&lt;img&gt;</code> 播放。IE／IE 相容模式不支援 <code>fetch</code>、<code>ReadableStream</code> 與 <code>canvas.captureStream</code>，頁面會自動使用 ES5 XMLHttpRequest + canvas 相容預覽；若公司瀏覽器仍無法顯示，請切換到 Edge 非 IE 模式。若使用 <code>LIVE_STREAM_HOST=0.0.0.0</code>，請以現場電腦實際 IP 取代網址中的 <code>127.0.0.1</code>，並限制防火牆來源。影格只保留在記憶體，不會產生逐影格 JPG 檔案。</p>
     </div>
 
     <h2>12. 用 GUI 複核告警與回送資料集</h2>
