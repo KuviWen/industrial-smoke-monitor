@@ -78,6 +78,7 @@ def main() -> int:
                         "timestamp_seconds": original.get("timestamp_seconds", ""),
                         "label_count": original.get("label_count", ""),
                         "label_status": original.get("label_status", "merged"),
+                        "roi_xyxy": original.get("roi_xyxy", ""),
                     },
                 )
                 copied += 1

@@ -163,7 +163,7 @@ python -c "from ultralytics import YOLO; print('Ultralytics import OK')"</pre>
 
     <h2>7. 用現場影片做部署前驗收</h2>
     <div class="step">
-      <p>IJmond 與你的工廠在攝影機位置、煙囪外觀、季節、光線與背景上都可能不同。請先收集至少三類影片：明確冒煙、正常無煙、容易混淆（雲、蒸汽、雨、逆光、夜間）。ROI 座標可先用影像檢視工具取得。</p>
+      <p>IJmond 與你的工廠在攝影機位置、煙囪外觀、季節、光線與背景上都可能不同。請先收集至少三類影片：明確冒煙、正常無煙、容易混淆（雲、蒸汽、雨、逆光、夜間）。ROI 座標可先用影像檢視工具取得。若模型訓練資料是完整畫面，預判時不要突然改成只輸入 ROI；固定攝影機的小目標場景，請先用<a href="../dataset_builder/docs/operations.html">dataset_builder 的 ROI 工作流程</a>產生 ROI 資料集，讓訓練與預判使用同一組前處理。</p>
       <pre>python scripts/replay_video.py \
   --weights runs/train/smoke_yolo11n/weights/best.pt \
   --source samples/chimney_day.mp4 \

@@ -51,17 +51,30 @@
 │   └── operations.html             # 操作手冊
 ├── src/smoke_dataset_builder/
 │   ├── dataset.py                  # 寫入 YOLO、可選翻轉副本與 manifest
+│   ├── roi.py                      # ROI 解析、邊界驗證與影格裁切
+│   ├── crop.py                     # processed YOLO 資料集的 mask-aware ROI 轉換
 │   ├── video.py                    # 影片資訊與規律抽幀
 │   └── yolo.py                     # polygon、翻轉座標、mask、label 驗證
 ├── scripts/
 │   ├── extract_frames.py           # 影片 → staging 候選影格
+│   ├── crop_yolo_roi.py            # 已有 processed 資料 → 新的 ROI 資料集
 │   ├── check_dataset.py            # image/label 配對與格式檢查
 │   ├── create_dataset_yaml.py      # 重新建立 dataset.yaml
 │   └── merge_yolo.py               # 多個 YOLO 資料集合併
 ├── gui/annotator_gui.py            # Tkinter 人工標註與可選預標註
 └── tests/                          # 不依賴現場影片的單元測試</pre>
 
-  <h2>三、最後輸出與母專案的對接</h2>
+  <h2>三、ROI 與訓練／預判的一致性</h2>
+  <p>ROI 是資料前處理的一部分，不只是部署時的畫面限制。若 GUI 以完整畫面標註，卻在母專案預判時才裁切 ROI，煙霧的相對大小、背景與座標分布會改變，尤其是小煙霧容易從可偵測變成漏檢。因此固定攝影機的建議流程是：</p>
+  <pre>原始影片
+    │
+    ├─ GUI 勾選 ROI → 裁切後影格 → 在裁切影像上標註 → ROI 資料集
+    │
+    └─ 母專案使用同一組 ROI_XYXY → 裁切後影格 → YOLO11-seg 推論</pre>
+  <p>如果資料集已經是完整畫面，可執行 <code>scripts/crop_yolo_roi.py</code>（位於 <code>dataset_builder/scripts/</code>）輸出另一份資料集。工具會將每個 polygon 先轉成 binary mask、裁切 ROI、重新取 contour，再以裁切後的寬高寫回 YOLO label；原始資料集不會被修改。</p>
+  <p class="note"><strong>ROI 格式：</strong><code>x1,y1,x2,y2</code>，以原始影像左上角為原點，<code>x2/y2</code> 是右／下邊界。例如 <code>600,0,1200,500</code> 是從 x=600 開始、寬 600、高 500；<code>600,0,600,500</code> 是零寬的無效 ROI。</p>
+
+  <h2>四、最後輸出與母專案的對接</h2>
   <pre>data/processed/video_yolo/
 ├── dataset.yaml
 ├── manifest.csv
@@ -76,12 +89,12 @@
     <tr><td><code>manifest.csv</code></td><td>影片來源、frame index、時間、label 數量</td><td>稽核與日後追查，不是 YOLO 必需檔</td></tr>
   </tbody></table>
 
-  <h2>四、YOLO11-seg label 長什麼樣子？</h2>
+  <h2>五、YOLO11-seg label 長什麼樣子？</h2>
   <pre>0 0.215000 0.180000 0.280000 0.165000 0.340000 0.240000
 0 0.620000 0.330000 0.700000 0.290000 0.760000 0.390000</pre>
   <p>第一個數字是類別 id；後面是依序排列的 polygon 頂點，x、y 都已除以影像寬、高，範圍通常為 0 到 1。若一張影像經人工確認沒有煙，label 檔保留為空白檔案。</p>
 
-  <h2>五、為什麼 split 要以影片/場次為單位？</h2>
+  <h2>六、為什麼 split 要以影片/場次為單位？</h2>
   <p>同一支影片相鄰影格非常相似。若把同一支影片隨機切到 train 與 val，驗證分數可能看似很高，但其實模型只是看過幾乎相同的畫面，這叫資料洩漏。GUI 的 split 要在處理整支影片前決定，建議一支影片只進一個 split，例如：</p>
   <table><thead><tr><th>來源</th><th>用途</th></tr></thead><tbody>
     <tr><td>不同日期、攝影機或場次</td><td>分散到 train / val / test，讓測試更接近真正換場景</td></tr>
@@ -89,7 +102,7 @@
     <tr><td>每個 split 沒有樣本</td><td>先補資料；不要拿同一段影片複製到另一個 split</td></tr>
   </tbody></table>
 
-  <h2>六、套件與離線設計</h2>
+  <h2>七、套件與離線設計</h2>
   <p>GUI 使用 Python 內建 Tkinter，不強制加入 Streamlit、Qt 或其他 GUI 套件。影像讀寫由 OpenCV 處理，預覽由 Pillow 顯示，YOLO11 自動預標註則在使用者提供本機 <code>.pt</code> 權重後才載入。這樣在隔離外網環境中，手動標註仍可運作，而且不會因為嘗試下載權重而卡住。</p>
   <p class="note ok"><strong>和母專案的關係：</strong>這是母專案的資料製作工具，不會修改 RTSP、告警或 Email 程式。產生的 <code>data/processed/video_yolo/dataset.yaml</code> 可直接作為母專案訓練輸入。</p>
 </article></main></body>

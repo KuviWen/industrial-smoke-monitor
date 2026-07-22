@@ -82,7 +82,30 @@ labels/train/chimney_01_f00000100_flip.txt</pre>
     <p class="note"><strong>只對 train 使用：</strong>如果目前 split 是 <code>val</code> 或 <code>test</code>，GUI 會顯示警告並停止這次儲存；請切換回 <code>train</code>，或取消勾選後再儲存。</p>
   </div>
 
-  <div class="step"><h2>5. 檢查資料集</h2>
+  <div class="step"><h2>5. 固定攝影機的 ROI 訓練資料（建議）</h2>
+    <p>如果煙囪在畫面中很小，建議讓訓練與預判使用同一個 ROI。GUI 中輸入 <code>x1,y1,x2,y2</code>、勾選「使用 ROI 裁切後標註」，再按「套用 ROI」；目前影格會先裁切，之後的滑鼠座標、預標註、儲存圖片與 polygon label 都以裁切後影像為準。</p>
+    <pre>python dataset_builder/gui/annotator_gui.py \
+  --video data/raw/videos/chimney_01.mp4 \
+  --output data/processed/video_yolo_roi \
+  --roi 600,0,1200,500 \
+  --split train</pre>
+    <p><strong>座標格式很重要：</strong><code>600,0,1200,500</code> 代表 x=600 到 x=1200，寬 600；不是把第三個數字當成 width。ROI 必須以原始影片（例如 1920×1080）為基準，且要包住煙囪與煙霧可能飄散的範圍。</p>
+    <p>完成這份 ROI 資料集後，母專案的 <code>ROI_XYXY</code> 必須使用相同座標。訓練用完整畫面、預判才裁切 ROI，會改變煙霧相對大小與背景，對小煙霧可能造成嚴重漏檢。</p>
+  </div>
+
+  <div class="step"><h2>6. 將既有 processed 資料另存成 ROI 資料集</h2>
+    <p>若你已經完成一份完整畫面的 YOLO 資料，可以用批次工具轉換，不必重新手動畫 polygon：</p>
+    <pre>python dataset_builder/scripts/crop_yolo_roi.py \
+  --input data/processed/video_yolo \
+  --output data/processed/video_yolo_roi \
+  --roi 600,0,1200,500
+
+python dataset_builder/scripts/check_dataset.py \
+  --dataset data/processed/video_yolo_roi</pre>
+    <p>輸入資料集只會被讀取，輸出一定要是不同資料夾。工具會將每個 YOLO polygon 轉成遮罩後裁切 ROI，再從裁切後 mask 重新產生 polygon；因此穿過 ROI 邊界的 mask 也會被正確截斷。輸出資料的 <code>manifest.csv</code> 會保留 <code>source_image</code> 與 <code>roi_xyxy</code>。只有要更新同一個「輸出目標」時才加 <code>--overwrite</code>，不要讓 input/output 同路徑。</p>
+  </div>
+
+  <div class="step"><h2>7. 檢查資料集</h2>
     <pre>python dataset_builder/scripts/check_dataset.py \
   --dataset data/processed/video_yolo</pre>
     <p>檢查項目包括：三個 split 的目錄、每張影像是否有同名 label、label 的類別 id、polygon 是否至少三個頂點、座標是否在 0 到 1，以及資料集是否至少有一張影像。成功時會重新寫出 <code>dataset.yaml</code>。</p>
@@ -91,7 +114,7 @@ labels/train/chimney_01_f00000100_flip.txt</pre>
   --dataset data/processed/video_yolo</pre>
   </div>
 
-  <div class="step"><h2>6. 直接交給母專案訓練</h2>
+  <div class="step"><h2>8. 直接交給母專案訓練</h2>
     <pre>python scripts/train.py \
   --data data/processed/video_yolo/dataset.yaml \
   --model yolo11n-seg.pt \
@@ -110,7 +133,7 @@ labels/train/chimney_01_f00000100_flip.txt</pre>
   --device cpu</pre>
   </div>
 
-  <div class="step"><h2>7. 將 IJmond 與影片資料集合併（可選）</h2>
+  <div class="step"><h2>9. 將 IJmond 與影片資料集合併（可選）</h2>
     <pre>python dataset_builder/scripts/merge_yolo.py \
   --source data/processed/ijmond_yolo data/processed/video_yolo \
   --output data/processed/smoke_combined_yolo</pre>

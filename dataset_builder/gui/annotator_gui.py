@@ -28,6 +28,13 @@ from smoke_dataset_builder.video import (  # noqa: E402
     safe_video_stem,
 )
 from smoke_dataset_builder.yolo import result_to_polygons  # noqa: E402
+from smoke_dataset_builder.roi import (  # noqa: E402
+    Roi,
+    crop_frame,
+    format_roi,
+    parse_roi,
+    validate_roi,
+)
 
 
 class AnnotatorApp(tk.Tk):
@@ -42,6 +49,7 @@ class AnnotatorApp(tk.Tk):
         output: str = "data/processed/video_yolo",
         weights: str | None = None,
         split: str = "train",
+        roi: str | None = None,
     ) -> None:
         super().__init__()
         self.title("Industrial Smoke Dataset Builder — YOLO11-seg")
@@ -60,11 +68,14 @@ class AnnotatorApp(tk.Tk):
         self.polygons: list[list[tuple[float, float]]] = []
         self.current_polygon: list[tuple[float, float]] = []
         self.model = None
+        self.roi: Roi | None = None
 
         self.video_var = tk.StringVar(value=video or "")
         self.output_var = tk.StringVar(value=output)
         self.weights_var = tk.StringVar(value=weights or "")
         self.split_var = tk.StringVar(value=split if split in {"train", "val", "test"} else "train")
+        self.roi_var = tk.StringVar(value=roi or "")
+        self.use_roi_var = tk.BooleanVar(value=bool(roi and roi.strip()))
         self.horizontal_flip_var = tk.BooleanVar(value=False)
         self.frame_var = tk.StringVar(value="Frame: —")
         self.status_var = tk.StringVar(
@@ -105,6 +116,21 @@ class AnnotatorApp(tk.Tk):
         ttk.Button(settings, text="選擇權重", command=self._choose_weights).grid(row=2, column=2, padx=4)
         ttk.Button(settings, text="載入/自動預標註", command=self._predict).grid(
             row=2, column=3, columnspan=2, sticky="ew", padx=(4, 0)
+        )
+
+        ttk.Label(settings, text="ROI x1,y1,x2,y2").grid(
+            row=3, column=0, sticky="w", padx=(0, 6), pady=3
+        )
+        ttk.Entry(settings, textvariable=self.roi_var).grid(
+            row=3, column=1, sticky="ew", pady=3
+        )
+        ttk.Checkbutton(
+            settings,
+            text="使用 ROI 裁切後標註",
+            variable=self.use_roi_var,
+        ).grid(row=3, column=2, sticky="w", padx=4)
+        ttk.Button(settings, text="套用 ROI", command=self._apply_roi).grid(
+            row=3, column=3, columnspan=2, sticky="ew", padx=(4, 0)
         )
 
         controls = ttk.Frame(self, padding=(8, 0, 8, 8))
@@ -181,6 +207,7 @@ class AnnotatorApp(tk.Tk):
             return
         try:
             info = read_video_info(path)
+            configured_roi = self._configured_roi(info.width, info.height)
             capture = cv2.VideoCapture(str(path))
             if not capture.isOpened():
                 raise RuntimeError("OpenCV 無法開啟影片")
@@ -193,6 +220,7 @@ class AnnotatorApp(tk.Tk):
         self.video_var.set(str(path))
         self.info = info
         self.capture = capture
+        self.roi = configured_roi
         self.frame_index = 0
         self.model = None
         self._clear_annotations()
@@ -200,7 +228,42 @@ class AnnotatorApp(tk.Tk):
         self._set_status(
             f"已開啟 {path.name}；影片 {info.width}x{info.height}, "
             f"{info.fps:.2f} FPS, {info.frame_count} frames。"
+            + (f"目前使用 ROI {format_roi(self.roi)}，標註與輸出均為裁切後座標。" if self.roi else "目前使用完整影格。")
         )
+
+    def _configured_roi(self, width: int, height: int) -> Roi | None:
+        """Read and validate the GUI ROI against the original video size."""
+
+        if not self.use_roi_var.get():
+            return None
+        roi = parse_roi(self.roi_var.get())
+        if roi is None:
+            raise ValueError("已勾選使用 ROI，請輸入 x1,y1,x2,y2")
+        return validate_roi(roi, width, height)
+
+    def _apply_roi(self) -> None:
+        """Apply a new ROI and reload the current original video frame."""
+
+        if self.info is None:
+            self._set_status("請先開啟影片，再套用 ROI。")
+            return
+        if not self._ask_unsaved():
+            return
+        try:
+            roi = self._configured_roi(self.info.width, self.info.height)
+        except ValueError as exc:
+            messagebox.showerror("ROI 設定錯誤", str(exc))
+            return
+        self.roi = roi
+        self.polygons = []
+        self.current_polygon = []
+        if self._read_current_frame():
+            if roi:
+                self._set_status(
+                    f"已套用 ROI {format_roi(roi)}；目前顯示裁切後影像，請重新確認標註。"
+                )
+            else:
+                self._set_status("已關閉 ROI；目前顯示完整影格，請重新確認標註。")
 
     def _read_current_frame(self) -> bool:
         if self.capture is None or self.info is None:
@@ -211,7 +274,7 @@ class AnnotatorApp(tk.Tk):
         if not ok:
             self._set_status(f"無法讀取影格 {self.frame_index}")
             return False
-        self.frame = frame
+        self.frame = crop_frame(frame, self.roi) if self.roi else frame
         self.frame_var.set(
             f"Frame: {self.frame_index} / {max(0, self.info.frame_count - 1)} "
             f"({self.frame_index / self.info.fps:.2f}s)"
@@ -380,6 +443,7 @@ class AnnotatorApp(tk.Tk):
                 frame_index=self.frame_index,
                 timestamp_seconds=self.frame_index / self.info.fps if self.info else None,
                 generate_horizontal_flip=generate_horizontal_flip,
+                roi_xyxy=format_roi(self.roi),
             )
         except Exception as exc:  # noqa: BLE001 - show filesystem/runtime errors in UI
             messagebox.showerror("儲存失敗", str(exc))
@@ -460,8 +524,13 @@ def main() -> None:
     parser.add_argument("--output", default="data/processed/video_yolo")
     parser.add_argument("--weights", default=None, help="Local YOLO11-seg .pt for optional pre-annotation")
     parser.add_argument("--split", default="train", choices=("train", "val", "test"))
+    parser.add_argument(
+        "--roi",
+        default="",
+        help="Optional ROI in original video coordinates: x1,y1,x2,y2",
+    )
     args = parser.parse_args()
-    app = AnnotatorApp(args.video, args.output, args.weights, args.split)
+    app = AnnotatorApp(args.video, args.output, args.weights, args.split, args.roi)
     app.mainloop()
 
 

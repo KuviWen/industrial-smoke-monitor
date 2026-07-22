@@ -30,6 +30,40 @@ data/processed/video_yolo/
 
 `dataset.yaml` 可直接交給母專案的 `scripts/train.py` 或 `scripts/validate.py`。每一行 label 是 YOLO11 segmentation polygon；沒有煙的影格則是空白 `.txt`，但只有在人工確認後才能儲存成負樣本。
 
+## ROI 訓練資料
+
+如果現場攝影機固定，而且煙囪只位於畫面的一小部分，建議讓「訓練」與「預判」使用完全相同的 ROI。ROI 格式是原始影片座標的 `x1,y1,x2,y2`，不是 `x,y,width,height`；例如從 `(600,0)` 開始、寬 600、高 500 應寫成 `600,0,1200,500`。
+
+### 在 GUI 中直接使用 ROI
+
+GUI 的 `ROI x1,y1,x2,y2` 欄位、`使用 ROI 裁切後標註` 勾選框與 `套用 ROI` 按鈕會讓目前影格先裁切，再在裁切後影像上標註。儲存的圖片是 ROI 大小，polygon 座標也會以裁切後的寬、高重新正規化；`manifest.csv` 會留下 `roi_xyxy` 紀錄。
+
+```powershell
+python dataset_builder/gui/annotator_gui.py `
+  --video data/raw/videos/chimney_01.mp4 `
+  --output data/processed/video_yolo_roi `
+  --roi 600,0,1200,500 `
+  --split train
+```
+
+GUI 的 ROI 必須包含煙囪本體與煙霧可能飄散的範圍，並保留一些邊界。完成這種資料集後，母專案的 `ROI_XYXY` 應使用同一組原始影像座標。
+
+### 將既有 processed 資料另存成 ROI 資料集
+
+如果已經有一份完整畫面的 processed YOLO 資料，不必重新標註，可以使用批次工具。它會讀取原始 polygon、以 mask 方式裁切 ROI 邊界，再將裁切後的 polygon 重新正規化；原始資料夾只讀，不會被覆蓋。
+
+```powershell
+python dataset_builder/scripts/crop_yolo_roi.py `
+  --input data/processed/video_yolo `
+  --output data/processed/video_yolo_roi `
+  --roi 600,0,1200,500
+
+python dataset_builder/scripts/check_dataset.py `
+  --dataset data/processed/video_yolo_roi
+```
+
+輸出資料夾必須和輸入資料夾不同。若輸出資料夾是先前產生的指定目標，才使用 `--overwrite`；不要把 `--input` 與 `--output` 寫成同一路徑。裁切後若 polygon 完全落在 ROI 外，該影格會變成空白 label；因此 ROI 不應切掉煙霧主要範圍。
+
 ## 左右翻轉資料增強
 
 GUI 的「是否同時生成左右翻轉的副本」選項只建議在 `split=train` 時勾選。儲存一張已人工確認的影像時，工具會同時產生：

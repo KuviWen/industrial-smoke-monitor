@@ -13,7 +13,7 @@
 - [手把手準備離線 Windows Python 3.11.15 環境](docs/offline_win_amd64_python311_cpu_install_guide.html)
 - [從訓練到部署操作書](docs/operations.html)
 - [訓練結果評估與調參指南（本次 IJmond 案例）](supplements/training_result_evaluation_guide.html)
-- [影片資料製作](dataset_builder)
+- [影片資料製作（含 ROI 訓練資料與 GUI）](dataset_builder)
 - [影片切割](video_splitter)
 - [報警資料檢查／重標註 GUI](alert_reviewer)
 

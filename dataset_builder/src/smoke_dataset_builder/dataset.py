@@ -86,7 +86,7 @@ def append_manifest_record(root: str | Path, record: Mapping[str, object]) -> No
 
     root_path = Path(root).expanduser().resolve()
     manifest_path = root_path / "manifest.csv"
-    fields = (
+    default_fields = (
         "image",
         "label",
         "split",
@@ -95,12 +95,32 @@ def append_manifest_record(root: str | Path, record: Mapping[str, object]) -> No
         "timestamp_seconds",
         "label_count",
         "label_status",
+        "roi_xyxy",
     )
     is_new = not manifest_path.exists() or manifest_path.stat().st_size == 0
-    with manifest_path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        if is_new:
+    if is_new:
+        with manifest_path.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=default_fields)
             writer.writeheader()
+            writer.writerow({field: record.get(field, "") for field in default_fields})
+        return
+
+    # Older datasets did not have ``roi_xyxy``.  Upgrade only the manifest
+    # header/rows when needed so adding ROI support remains backward compatible.
+    with manifest_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        existing_fields = list(reader.fieldnames or default_fields)
+        rows = list(reader)
+    fields = existing_fields + [field for field in default_fields if field not in existing_fields]
+    if fields != existing_fields:
+        temporary_path = manifest_path.with_name(f"{manifest_path.name}.tmp")
+        with temporary_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+        temporary_path.replace(manifest_path)
+    with manifest_path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writerow({field: record.get(field, "") for field in fields})
 
 
@@ -123,6 +143,7 @@ class YoloDatasetWriter:
         frame_index: int | None = None,
         timestamp_seconds: float | None = None,
         generate_horizontal_flip: bool = False,
+        roi_xyxy: str = "",
     ) -> tuple[Path, Path]:
         """Save a BGR image and its reviewed polygon label.
 
@@ -159,6 +180,7 @@ class YoloDatasetWriter:
             frame_index=frame_index,
             timestamp_seconds=timestamp_seconds,
             label_status="reviewed",
+            roi_xyxy=roi_xyxy,
         )
 
         if generate_horizontal_flip:
@@ -176,6 +198,7 @@ class YoloDatasetWriter:
                 frame_index=frame_index,
                 timestamp_seconds=timestamp_seconds,
                 label_status="reviewed_augmented_horizontal_flip",
+                roi_xyxy=roi_xyxy,
             )
         return image_path, label_path
 
@@ -193,6 +216,7 @@ class YoloDatasetWriter:
         frame_index: int | None,
         timestamp_seconds: float | None,
         label_status: str,
+        roi_xyxy: str,
     ) -> tuple[Path, Path, int]:
         """Write one image/label pair and one provenance row."""
 
@@ -219,6 +243,7 @@ class YoloDatasetWriter:
                 else f"{timestamp_seconds:.3f}",
                 "label_count": len(lines),
                 "label_status": label_status,
+                "roi_xyxy": roi_xyxy,
             },
         )
         return image_path, label_path, len(lines)
